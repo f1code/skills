@@ -1,9 +1,28 @@
 ---
 name: using-git-worktrees
-description: Create a git worktree for a specified branch. Fuzzy-matches the branch name against existing branches, confirms with the user if multiple matches, then checks out the worktree.
+description: >
+  Create a git worktree to check out a branch in a separate folder without
+  disturbing the current working tree. Use when the user wants to work on two
+  branches at the same time, switch to a hotfix without stashing, review another
+  branch while keeping work in progress, set up filesystem isolation for parallel
+  agent tasks, or open a branch in a separate directory. Fuzzy-matches the branch
+  name against existing branches, confirms with the user if multiple matches are
+  found, then checks out the worktree.
 ---
 
 # Git Worktree
+
+## When to Use This Skill
+
+- "I need to fix a hotfix but don't want to lose my current work"
+- "Can I check out branch X without stashing?"
+- "I want to work on two branches at the same time"
+- "Set up a separate folder for branch Y"
+- "I need to test/run the app on two branches side by side"
+- Starting parallel agent work where each agent needs its own branch checkout
+- Any workflow (e.g. `kanban-based-development`) that says "create a worktree"
+
+## Overview
 
 Creates a git worktree under `<worktree root>/<branch-slug>` for a given branch.
 
