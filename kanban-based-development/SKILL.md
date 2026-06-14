@@ -204,7 +204,10 @@ The `--append-body` (`-a`) flag appends text to the existing body without replac
 
 Before merging, run an independent self-review of the changes. The kanban
 workflow owns the orchestration here; the actual review checklist lives in
-the `reviewing-changes` skill, which the sub-agent loads.
+`reviewing-changes.md`, bundled in this skill's own directory (beside this
+`SKILL.md`), which the sub-agent reads. Determine the absolute path to that
+file once — `<this-skill-directory>/reviewing-changes.md` — and do NOT hardcode
+a machine-specific path.
 
 **Skip review entirely if the task is trivial** (see "Trivial Task"
 definition near the top). When skipping, append a one-line note to the task
@@ -223,8 +226,8 @@ For non-trivial tasks:
 - **Spawn a fresh-context sub-agent** to perform the review. In OpenCode,
   use the `task` tool with `subagent_type: general`. In Claude Code, use
   the equivalent `Task` tool with a general-purpose subagent. The
-  fresh-context sub-agent is what gives the review independence — loading
-  `reviewing-changes` in your own context will not.
+  fresh-context sub-agent is what gives the review independence — reading
+  `reviewing-changes.md` in your own context will not.
 - The sub-agent runs **from the worktree shell** (cwd = the task worktree
   path), so `git diff main...HEAD` and file reads resolve against the
   branch under review.
@@ -233,8 +236,12 @@ Sub-agent prompt template (pass as the `prompt` argument; fill in the
 placeholders):
 
 ```
-Load the `reviewing-changes` skill (via the `skill` tool) and follow its
-instructions.
+Read and follow the review instructions at:
+  <this-skill-directory>/reviewing-changes.md
+(Read it directly with the read tool. If that file is not available, perform a
+code review and return a verdict block: first line `verdict: APPROVE` or
+`verdict: CHANGES_REQUESTED`, then a `## Findings` list with each item tagged
+`[BLOCKING]` or `[ADVISORY]`.)
 
 Inputs:
 - Task ID: <ID>
