@@ -99,12 +99,15 @@ kanban-md create "TITLE" [--status S] [--priority P] [--assignee A] \
 Prints the created task ID and summary. `--claim` immediately claims the task for an agent,
 combining creation and claiming in one step.
 
-For Markdown, multiline text, or anything containing quotes/backticks, pass the body with a
-single-quoted heredoc inside command substitution. Do not cram structured task bodies into one
-escaped shell string.
+For Markdown, multiline text, or anything containing quotes/backticks, **write the body to a
+temp file first**, then pass it via `$(cat /tmp/body.md)`. This is the only reliable approach
+when running inside the `bash` tool — inline heredocs (`<<'EOF'`) fail there because the tool
+wraps the command in `bash -c "..."`, which breaks single-quoted heredoc parsing.
 
-```bash
-kanban-md create "TITLE" --priority P --tags T1,T2 --body "$(cat <<'EOF'
+```
+# Step 1 — write the body using the write tool (not bash)
+# File: /tmp/task-body.md
+
 ## Problem
 
 Describe the issue.
@@ -113,9 +116,16 @@ Describe the issue.
 
 - First criterion.
 - Second criterion.
-EOF
-)"
 ```
+
+```bash
+# Step 2 — reference the file
+kanban-md create "TITLE" --priority P --tags T1,T2 --body "$(cat /tmp/task-body.md)"
+```
+
+Do **not** attempt to cram a structured body into a single escaped shell string, and do **not**
+use `$(cat <<'EOF' ... EOF)` inline in a `bash` tool call — it will silently mangle or fail
+if the content contains single quotes, backticks, or spans many lines.
 
 ### show
 
@@ -382,7 +392,7 @@ kanban-md list --compact --status in-progress,review   # all active/parked work
 - **DO** use `kanban-md show ID` (default format) to read task details — it is readable and includes the full body.
 - **DO** pass `--yes` on delete. Without it, the command hangs waiting for stdin.
 - **DO** use `pick --claim <agent> --status todo --move in-progress` rather than list → edit → move — it's atomic and prevents claim races.
-- **DO** pass Markdown or multiline `--body`, `--append-body`, `--note`, and `--block` text with `$(cat <<'EOF' ... EOF)` to avoid broken shell escaping.
+- **DO** write long/structured `--body` content to a temp file with the `write` tool, then pass it as `--body "$(cat /tmp/body.md)"`. Inline heredocs (`<<'EOF'`) break inside the `bash` tool's `bash -c` wrapper, especially when the content contains single quotes or backticks.
 - **DO** use `-a` / `--append-body` with `--claim <agent>` when adding progress notes — this renews the claim and appends without overwriting the body.
 - **DO NOT** use `--json` unless you are piping output to another tool or parsing fields programmatically. Default and `--compact` formats are sufficient for reading.
 - **DO NOT** hardcode status or priority values. Read them from `kanban-md board --compact`.
