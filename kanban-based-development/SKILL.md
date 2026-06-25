@@ -40,7 +40,7 @@ The **claim** mechanic is the coordination primitive. It prevents two agents fro
 - **Never release someone else’s claim.** Only use `edit --release` for your own work (or when the user explicitly asks).
 - **Always leave a handoff.** Before you park a task, write a short update in the body so someone else can continue.
 - **Refresh claims to avoid timeout.** If the task might take longer than `claim_timeout`, periodically renew your claim: `kanban-md edit <ID> --claim <agent>`.
-- **Review verdict ends your session scope.** After spawning the review sub-agent and appending its block, your work on this task is done for this session — regardless of verdict. APPROVE does not authorize you to proceed to merge unilaterally; it means the task is ready and the user may direct a merge. CHANGES_REQUESTED means hand off immediately. In both cases: stop, pick the next task (or report there is nothing to pick), and wait.
+- **Review verdict drives a bounded fix loop, then ends your session scope.** After spawning the review sub-agent and appending its block: on APPROVE, hand the task to the user for merge (APPROVE does not authorize you to merge unilaterally). On CHANGES_REQUESTED, enter the autonomous-fix loop (§3.5): fix the findings in the worktree and re-review, up to 3 cycles. The loop ends in one of two terminal states — APPROVE (hand to user for merge) or exhausted/blocked (hand off to user). In every terminal state: stop, pick the next task (or report there is nothing to pick), and wait.
 
 ## Trivial Task
 
@@ -239,9 +239,12 @@ placeholders):
 Read and follow the review instructions at:
   <this-skill-directory>/reviewing-changes.md
 (Read it directly with the read tool. If that file is not available, perform a
-code review and return a verdict block: first line `verdict: APPROVE` or
-`verdict: CHANGES_REQUESTED`, then a `## Findings` list with each item tagged
-`[BLOCKING]` or `[ADVISORY]`.)
+code review and return: first line `verdict: APPROVE` or
+`verdict: CHANGES_REQUESTED`, second line
+`counts: critical=<n> important=<n> suggestion=<n>`, then `## Strengths` and a
+`## Findings` list with each item tagged `[CRITICAL]`, `[IMPORTANT]`, or
+`[SUGGESTION]`. The verdict is CHANGES_REQUESTED if there is any Critical, any
+Important, or 3+ Suggestion findings; otherwise APPROVE.)
 
 Inputs:
 - Task ID: <ID>
@@ -271,42 +274,49 @@ Branch on the verdict (the token after `verdict:` on the first line):
     --timestamp --release
   ```
 
-  Then pick the next task. The user will direct merge when ready (e.g. "merge task 8", "proceed to merge").
+  Then pick the next task. The user will direct merge when ready (e.g. "merge task 8", "proceed to merge"). Any one or two Suggestions on an APPROVE remain on the task body as backlog — you do not action them.
 
-- **CHANGES_REQUESTED** → **do not attempt to fix.** Immediately follow
-  the [Blocked / Needs User Input](#blocked--needs-user-input-the-review-and-move-on-rule)
-  procedure. The findings are already appended to the task body, so the
-  handoff note can be a one-liner pointing at the latest review block:
+- **CHANGES_REQUESTED** → enter the **autonomous-fix loop**. This is permitted without new user approval because the plan was already approved (§1.5) and your scope is the review's findings — not new functionality. Keep the task in `in-progress` throughout.
+
+  Repeat up to **3 cycles** (the initial review counts as cycle 1):
+
+  1. **Defer-to-user check.** If fixing any finding needs a product/spec decision, credentials/access, a non-mechanical merge-conflict resolution, or anything else under [Defer-to-User Boundary](#defer-to-user-boundary) — stop the loop and hand off as blocked (below), naming the finding(s).
+  2. In the worktree, fix the findings listed in the **latest** review block. Stay within the task's existing scope — do not refactor unrelated code or expand scope.
+  3. Run the project checks (`go test -race ./...`, `make lint`). Commit when green:
+     ```bash
+     git commit -am "fix(review): address cycle <k> findings for #<ID>"
+     ```
+  4. Append a progress note from board home:
+     ```bash
+     cd <board-home>
+     kanban-md edit <ID> --append-body "Auto-fix cycle <k>: addressed N finding(s); re-reviewing." --timestamp --claim <agent>
+     ```
+  5. Spawn a **fresh** review sub-agent (new context, same prompt template) and append its returned block to the task body.
+  6. Branch on the new verdict:
+     - **APPROVE** → follow the APPROVE path above (handoff for merge). Done.
+     - **CHANGES_REQUESTED** and cycles remain → go to step 1.
+     - **CHANGES_REQUESTED** and the 3-cycle budget is exhausted → **blocked** (below).
+
+  **Exhausted / blocked** → stop fixing and hand off to the user, following the [Blocked / Needs User Input](#blocked--needs-user-input-the-review-and-move-on-rule) procedure. The findings and all fix cycles are already on the task body:
 
   ```bash
   kanban-md handoff <ID> --claim <agent> \
-    --block "Review found N blocking issue(s)" \
-    --note "See latest review block in task body." \
+    --block "Auto-fix exhausted after 3 cycles" \
+    --note "## Handoff
+- Remaining findings: see latest review block in task body
+- Branch: task/<ID>-<slug>
+- What I tried: <one line per cycle>
+- Next step: <decision/access the user must provide, if any>" \
     --timestamp --release
   ```
 
-  Then pick the next task. When the user resolves the findings (themselves
-  or by directing an agent), the task is re-claimed via the existing
-  "Resuming a parked task" procedure and a fresh review is run as part of
-  resuming work.
+  Then pick the next task.
 
-  **Scope rule for the resuming agent**: when a task is resumed after a
-  review block, your scope is **the blocking findings in the latest review
-  block**, not the original task description. The original implementation
-  is assumed correct except where the review identified blockers. Do not
-  refactor unrelated code, re-do completed work, or expand scope. After
-  addressing the blockers, run §3.5 again (fresh sub-agent) — the
-  reviewer does re-read the full diff, so any drift will surface. If you
-  believe the review missed something or a finding is wrong, leave a note
-  on the task and defer to the user; do not silently override.
+  **Scope rule (every cycle):** your scope is the findings in the *latest* review block, never the original task description. The implementation is assumed correct except where the review flagged it. If you believe a finding is wrong, do not silently override it — leave a note on the task and hand off to the user.
 
-> *Future extension point: an autonomous-fix mode would branch here to
-> attempt fixing blocking findings before handing off. Not implemented —
-> for now all `CHANGES_REQUESTED` verdicts go straight to handoff.*
-
-Each review (initial or post-resume) must be a fresh sub-agent invocation
-(new context). It re-reads the plan and the full diff via the skill — do
-not try to "continue" a previous review.
+Each review (initial or post-fix) must be a fresh sub-agent invocation (new
+context). It re-reads the plan and the full diff via the skill — so any drift
+your fixes introduce will surface.
 
 ## Resuming for merge (user-directed)
 
@@ -411,9 +421,11 @@ kanban-md edit <ID> --unblock --claim <agent>   # if it was blocked
 kanban-md move <ID> in-progress --claim <agent>
 ```
 
-If the task was parked on a review block, your scope is constrained to
-the blocking findings in the latest review block — see the scope rule in
-§3.5. Do not re-do the original task.
+If the task was parked after the auto-fix loop was exhausted, a fresh review
+block with its findings is already on the task body. Re-running work means
+addressing those remaining findings (and the user's guidance), then running
+§3.5 again. Your scope is the findings in the latest review block plus anything
+the user asked for — not a re-do of the original task.
 
 ## Status meanings (keep the board honest)
 

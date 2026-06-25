@@ -1,11 +1,6 @@
 ---
 name: kanban-loop-development
 description: >
-  Autonomous loop that drains the entire `todo` column onto a shared integration
-  branch, one task at a time. Each task is implemented, self-reviewed, and
-  auto-fixed if needed (up to 3 review cycles). The loop stops when todo is
-  empty (success) or a task exhausts its review cycles (blocker). Final merge
-  to main is deferred to the user.
   Use when asked to "work through all todo tasks", "drain the todo column",
   "loop through all tasks autonomously", "run the kanban loop", or
   "process all todo tasks".
@@ -116,16 +111,22 @@ Self-review sub-agents must return a block in this format (the loop parses the `
 
 ```
 verdict: APPROVE
+counts: critical=0 important=0 suggestion=2
 <!-- or -->
 verdict: CHANGES_REQUESTED
+counts: critical=1 important=2 suggestion=1
+
+## Strengths
+- <specific, file:line where possible>
 
 ## Findings
-1. [BLOCKING] <description of issue>
-2. [ADVISORY] <description>
+1. [CRITICAL]   <description of issue>
+2. [IMPORTANT]  <description>
+3. [SUGGESTION] <description>
 ...
 ```
 
-Only findings marked `[BLOCKING]` must be addressed before re-review. `[ADVISORY]` findings are informational. The loop acts on the verdict line only; findings guide the auto-fix step.
+The verdict is CHANGES_REQUESTED if there is any Critical, any Important, or 3+ Suggestion findings; otherwise APPROVE (see `reviewing-changes.md` for the full rule). The loop acts on the verdict line only; on CHANGES_REQUESTED the fix step addresses the findings listed in the block.
 
 ---
 
@@ -309,27 +310,18 @@ kanban-md edit <ID> \
 Before creating a worktree, check whether one already exists for this task ID (possible on resume after a blocker):
 
 ```bash
-git worktree list | grep "kanban-loop-task-<ID>"
+git worktree list | grep "task/<ID>"
 ```
 
-- **Not found**: create it, branched off **the integration branch HEAD** (not `main`):
+The branch name should be `task/<ID>-<slug>`.  Check if it is strictly ahead of the **integration branch HEAD**.
 
-  ```bash
-  git worktree add ../kanban-loop-task-<ID> \
-    -b task/<ID>-<slug> \
-    <integration-branch>
-  ```
+- **Not found**: create it, branched off **the integration branch HEAD** (not `main`).  
+Name the branch `task/<ID>-<slug>`.  Use git worktree skill or project instructions.
+Note worktree directory
 
-- **Found with the correct branch**: reuse it — just note the path.
-- **Found with a stale/wrong branch**: remove and recreate:
+- **Found with the correct branch**: reuse it — just note the path (worktree directory)
+- **Found with a stale/wrong branch**: STOP and ask user how to proceed
 
-  ```bash
-  git worktree remove --force ../kanban-loop-task-<ID>
-  git branch -D task/<ID>-<slug>   # force-delete; it will be recreated
-  git worktree add ../kanban-loop-task-<ID> \
-    -b task/<ID>-<slug> \
-    <integration-branch>
-  ```
 
 > **Why integration HEAD, not main?** Tasks are sequentially dependent. Branching off the integration HEAD means each task inherits all prior merged work, minimising conflicts at merge time.
 
@@ -337,10 +329,11 @@ git worktree list | grep "kanban-loop-task-<ID>"
 
 ### Step 4: Implement
 
-Spawn a fresh-context implementation sub-agent. Pass the following prompt, with its working directory set to `<absolute path to ../kanban-loop-task-<ID>>`:
+Spawn a fresh-context implementation sub-agent. Pass the following prompt, with its working directory set to
+`<worktree directory>`:
 
 ```
-Change your working directory to <absolute path to ../kanban-loop-task-<ID>> before running any commands.
+Change your working directory to <worktree directory> before running any commands.
 
 You are implementing a single kanban task. Do NOT modify the kanban board — the orchestrating agent handles all board updates.
 
@@ -351,7 +344,7 @@ Inputs:
 - Plan: <plan path, or "trivial — no plan">
 - Integration branch: <integration-branch>
 - Task branch: task/<ID>-<slug>
-- Worktree path: <absolute path to ../kanban-loop-task-<ID>>
+- Worktree path: <worktree directory>
 
 Instructions:
 1. If a plan path is provided, read it before starting.
@@ -408,7 +401,7 @@ Look for the most recent `review_cycle: <N>` line in the body. Use that value as
 Pass the following prompt. The sub-agent must run from the worktree (set its working directory to `<absolute-worktree-path>`):
 
 ```
-Change your working directory to <absolute path to ../kanban-loop-task-<ID>> before running any commands.
+Change your working directory to <worktree directory> before running any commands.
 
 Read and follow the review instructions at:
   <reviewing-changes-file>
@@ -417,16 +410,21 @@ If that path is empty or the file is not available, perform a code review and re
   verdict: APPROVE
   or
   verdict: CHANGES_REQUESTED
+  counts: critical=<n> important=<n> suggestion=<n>
+  ## Strengths
+  - <specific>
   ## Findings
-  1. [BLOCKING] <description>
-  2. [ADVISORY] <description>
+  1. [CRITICAL]   <description>
+  2. [IMPORTANT]  <description>
+  3. [SUGGESTION] <description>
+  (CHANGES_REQUESTED if any Critical, any Important, or 3+ Suggestion findings.)
 
 Inputs:
 - Task ID: <ID>
 - Plan: <plan path from task body, or "trivial — no plan">
 - Base ref: <integration-branch>
 - Head ref / branch: task/<ID>-<slug>
-- Worktree path: <absolute path to ../kanban-loop-task-<ID>>
+- Worktree path: <worktree directory>
 
 Return only the markdown review block (no commentary before or after).
 ```
@@ -456,12 +454,7 @@ git switch <integration-branch>
 git merge task/<ID>-<slug> --no-ff -m "feat: task #<ID> <description>"
 ```
 
-Run checks on the integration branch:
-
-```bash
-go test ./...
-golangci-lint run ./...
-```
+Run tests and lint on the integration branch (per project instructions)
 
 **If merge or tests fail:**
 
@@ -485,7 +478,7 @@ kanban-md edit <parent-ID> \
 Clean up worktree and force-delete the task branch (it was merged into the integration branch, not main, so `-d` would fail):
 
 ```bash
-git worktree remove --force ../kanban-loop-task-<ID>
+git worktree remove --force <worktree directory>
 git branch -D task/<ID>-<slug>
 ```
 
@@ -495,10 +488,11 @@ git branch -D task/<ID>-<slug>
 
 **CHANGES_REQUESTED (review_cycle < 3):**
 
-Spawn a fresh-context fix sub-agent. Pass the following prompt, with its working directory set to `<absolute path to ../kanban-loop-task-<ID>>`:
+Spawn a fresh-context fix sub-agent. Pass the following prompt, with its working directory set to `<worktree
+directory>`:
 
 ```
-Change your working directory to <absolute path to ../kanban-loop-task-<ID>> before running any commands.
+Change your working directory to <worktree directory> before running any commands.
 
 You are fixing blocking review findings on a kanban task. Do NOT modify the kanban board — the orchestrating agent handles all board updates.
 
@@ -507,17 +501,15 @@ Inputs:
 - Task title: <title>
 - Plan: <plan path, or "trivial — no plan">
 - Task branch: task/<ID>-<slug>
-- Worktree path: <absolute path to ../kanban-loop-task-<ID>>
+- Worktree path: <worktree directory>
 - Review cycle: <review_cycle>
-- Blocking findings to fix:
-<paste all [BLOCKING] findings from the review block>
+- Findings to fix:
+<paste all findings from the review block>
 
 Instructions:
 1. If a plan path is provided, read it for context.
-2. Fix each [BLOCKING] finding. Do not address [ADVISORY] findings.
-3. Run checks:
-   go test ./...
-   golangci-lint run ./...
+2. Fix the findings listed above. Stay within the task's existing scope — do not refactor unrelated code or add new functionality.
+3. Run checks (project instructions)
 4. If checks pass, commit:
    git add <files>
    git commit -m "fix: address review findings (cycle <review_cycle>)"
@@ -564,13 +556,7 @@ Three cycles exhausted without APPROVE → go to **[Phase 3: Blocker End](#phase
 
 `todo` is empty. All tasks have been merged to the integration branch.
 
-From board home, run the full suite on the integration branch:
-
-```bash
-git switch <integration-branch>
-go test ./...
-golangci-lint run ./...
-```
+From board home, run the full suite on the integration branch (project instructions for definition of done)
 
 Return to `main` before touching the board:
 
@@ -638,7 +624,7 @@ kanban-md handoff <ID> --claim <agent> \
 Reason: <reason>
 Review cycles attempted: <N>
 Latest findings: see review block appended to this task body
-Worktree preserved at: <absolute path to ../kanban-loop-task-<ID>>
+Worktree preserved at: <worktree directory>
 Branch: task/<ID>-<slug>" \
   --timestamp --release
 ```
@@ -670,7 +656,7 @@ Present a summary to the user:
 Blocked at: task #<ID> — <title>
 Reason: <reason>
 Tasks merged before blocker: <list>
-Worktree preserved: ../kanban-loop-task-<ID>
+Worktree preserved: <worktree directory>
 Branch: task/<ID>-<slug>
 
 Fix the blocking issue, then resume:
