@@ -23,8 +23,9 @@
 
 ## Standard Project Layout
 
- - project root
-     - develop -- main working branch
-     - kanban -- kanban board
-     - worktrees -- git worktrees (use worktrunk)
-     - plans -- plan folder - not committed
+(project root)
+├── main                     (main development dir & git root)
+├── worktrees/               (git worktrees container)
+│
+├── plans/                   (project plans & docs - no git)
+└── research/                (research & exploration - no git)
