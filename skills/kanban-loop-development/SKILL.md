@@ -1,9 +1,9 @@
 ---
 name: kanban-loop-development
 description: >
-  Use when asked to "work through all todo tasks", "drain the todo column",
-  "loop through all tasks autonomously", "run the kanban loop", or
-  "process all todo tasks".
+  Use when asked to "run the kanban loop on a parent task", "work through the
+  children of task X", "process the subtasks of an epic", or "loop through a
+  parent task's todo children autonomously". A parent task ID is required.
 allowed-tools:
   - Bash(kanban-md *)
   - Bash(kbmd *)
@@ -17,8 +17,8 @@ allowed-tools:
 
 # Kanban Loop Development
 
-Autonomous, sequential loop that processes the entire `todo` column, merging
-each completed task onto a shared integration branch. The loop does not pause
+Autonomous, sequential loop that processes the `todo` children of a required
+parent task, merging each completed child onto a shared integration branch. The loop does not pause
 for plan approval or per-task merge decisions. The only user handoff is at
 the very end: final merge of the integration branch into the starting board home
 branch.
@@ -36,6 +36,9 @@ The **claim** mechanic is the coordination primitive. **You MUST claim a task be
 
 ## Non-Negotiables
 
+- **A parent task ID is required.** Refuse to start without one; never auto-create a parent.
+- **Claim the parent at setup and refresh it every iteration.** A live (non-expired) claim by another agent means another loop owns it — stop and surface the conflict.
+- **The loop only reads task hierarchy.** It never sets the structural `--parent` field; the `loop-<parentID>` tag is the sole selection mechanism.
 - **Claim before you change anything.** No task edits, no code changes.
 - **Write a plan before you build.** Plans are for audit — they do NOT require user approval. Auto-proceed after writing and linking.
 - **One active task per loop iteration.** Do not pick the next task until the current one is merged or the loop is stopped.
@@ -63,12 +66,7 @@ Touching more than one file of tracked code, changing a function signature, API,
 - **Always do code changes in a task worktree.** Never edit code in board home.
 - If the board is git-tracked, **commit board changes on starting, board-home branch as a separate commit** after the integration branch is merged.
 
-At the start of the session, determine and remember `<board-home>`:
-
-```bash
-cd <the canonical repo directory that owns the shared board>
-pwd   # remember this path as <board-home>
-```
+At the start of the session, capture `<board-home>` as the current working directory.
 
 ## Slug Derivation
 
@@ -126,128 +124,45 @@ The verdict is CHANGES_REQUESTED if there is any Critical, any Important, or 3+ 
 
 ## Phase 0: Setup
 
-Before picking any tasks, establish the integration branch and parent task.
+The loop requires an existing parent task. If the user did not supply a parent
+task ID, stop and ask for one — do not invent or auto-create a parent.
 
-### Determining setup mode
+1. **Board home.** From `<board-home>`, confirm a clean tree and remember the
+   current branch as `<home-branch>`. The integration branch is cut from it and
+   the final merge targets it.
 
-Check the user's request for an existing parent task ID (e.g. "use task #42 as parent", "parent is task 7", "resume from #12"):
+2. **Plans dir** Resolve from project or global conventions, store absolute path in
+   `<plans-dir>`.
 
-- **Parent task ID explicitly provided** → **Mode B** (use existing parent task)
-- **User says "resume" but no ID detectable** → run `kanban-md list --status in-progress --compact` to find candidate parent tasks whose title starts with "Loop run:"; confirm the correct one with the user before proceeding
-- **No parent task ID mentioned** → **Mode A** (create fresh)
+3. **Read the parent.** `kanban-md show <parent-ID>`.
 
----
+4. **Claim guard (prevents two loops on one parent).** Attempt the claim:
+   `kanban-md edit <parent-ID> --claim <agent>`. 
+   On error, **STOP** and report that another loop owns parent #<parent-ID>. Do not steal.
 
-### Mode A: Fresh run
+   (Claim TTL is 1h, so a prior session's expired claim reclaims cleanly.)
 
-Confirm board home is on a clean working tree, and capture the home branch:
+5. **Integration branch.** Scan the parent body for an `Integration branch: <name>` line.
+   - Found → use it as `<integration-branch>`; confirm it exists locally, fetching
+     if needed. If it exists nowhere, stop and ask.
+   - Not found → create `loop/<YYYY-MM-DD>-<slug>` off `<home-branch>` (slug from
+     the parent title), return to `<home-branch>`, and backfill the
+     `Integration branch:` line into the parent body.
 
-```bash
-cd <board-home>
-git status          # must be clean — stop and report if unexpected changes
-git symbolic-ref --short HEAD   # remember this as <home-branch>
-```
+6. **Activate the parent.** Move it to `in-progress` (claimed by `<agent>`) and
+   append a timestamped `Loop (re)started by <agent>.` note.
 
-`<home-branch>` is whatever branch board home is currently on (`main`, a
-release branch, etc.). The loop binds to it for this run: the integration
-branch is cut from it and the final merge targets it.
+7. **Tag the children (selection scope).** Tag every current `todo` child of the
+   parent with `loop-<parent-ID>` — one `edit` call with the comma-separated child
+   IDs from `kanban-md list --parent <parent-ID> --status todo`. This tag is what
+   the atomic `pick` filters on; re-running it on resume is idempotent.
+   - If the parent has **no** `todo` children, report "nothing to do" and stop cleanly.
 
-Create the integration branch off current board-home branch. Derive `<slug>` from the user's stated goal (see Slug Derivation):
-
-```bash
-DATE=$(date +%Y-%m-%d)
-git switch -c loop/${DATE}-<slug>
-git switch -     # return to <home-branch>; worktrees branch off the integration branch
-```
-
-Remember `<integration-branch>` = `loop/<YYYY-MM-DD>-<slug>`, then create and claim the parent kanban task:
-
-```bash
-kanban-md add "Loop run: <slug>" \
-  --body "Integration branch: loop/${DATE}-<slug>
-
-Goal: <user's stated goal>
-Started: ${DATE}
-Agent: <agent>" \
-  --status in-progress
-```
-
-The `add` command prints the new task ID. Remember it as `<parent-ID>`. Then claim it:
-
-```bash
-kanban-md edit <parent-ID> --claim <agent>
-```
-
----
-
-### Mode B: Use existing parent task
-
-Read the parent task in full:
-
-```bash
-kanban-md show <parent-ID>
-```
-
-Capture the home branch as `<home-branch>` (as in Mode A):
-
-```bash
-git symbolic-ref --short HEAD   # remember this as <home-branch>
-```
-
-**Locate or create the integration branch:**
-
-Scan the task body for a line matching `Integration branch: <name>`.
-
-- **Found**: use that name as `<integration-branch>`.
-- **Not found** (task was created manually without a branch line): create a branch now and backfill the task body. Derive `<slug>` from the parent task title:
-
-  ```bash
-  DATE=$(date +%Y-%m-%d)
-  git switch -c loop/${DATE}-<slug>
-  git switch -
-  kanban-md edit <parent-ID> \
-    --append-body "Integration branch: loop/${DATE}-<slug>" \
-    --timestamp --claim <agent>
-  ```
-
-**Verify the branch exists locally:**
-
-```bash
-git branch --list "<integration-branch>"
-```
-
-If the output is empty, fetch it:
-
-```bash
-git fetch origin <integration-branch>
-git branch --list "<integration-branch>"
-```
-
-If still not found locally or remotely, stop and ask the user before proceeding.
-
-**Handle stale claims from a prior session:**
-
-If the parent task or any in-progress sub-task shows a claim by a different agent name (from a prior crashed session), check whether that session is still alive. If it is clearly dead (the agent name is not active), you may re-claim:
-
-```bash
-kanban-md edit <parent-ID> --claim <agent>   # overwrites stale claim
-```
-
-Apply the same logic to any sub-task stuck `in-progress` with a stale claim.
-
-**Claim and activate the parent task:**
-
-The parent task may be in any status. Move it to `in-progress` and claim it:
-
-```bash
-kanban-md edit <parent-ID> --claim <agent>
-kanban-md move <parent-ID> in-progress --claim <agent>
-kanban-md edit <parent-ID> \
-  --append-body "Loop (re)started by <agent>." \
-  --timestamp --claim <agent>
-```
-
----
+> The loop never sets the structural `--parent` field — children are already
+> parented (that is how they are listed). The tag is purely for atomic selection.
+>
+> **Known limitation:** children added under the parent *after* setup won't carry
+> the tag and won't be picked. The run scope is fixed at setup.
 
 ## Main Loop
 
@@ -256,14 +171,22 @@ Board home must be on `<home-branch>` at the start of every iteration.
 
 ### Step 1: Pick a task
 
-From board home:
+From board home, first refresh the parent claim (1h TTL — keeps the parent owned
+across long child tasks):
 
 ```bash
-cd <board-home>
-kanban-md pick --claim <agent> --status todo --move in-progress
+kanban-md edit <parent-ID> --claim <agent>
 ```
 
-If nothing is returned — **todo is empty → go to [Phase 2: Success End](#phase-2-success-end).**
+On error, **stop**, it means another agent started working on it!!
+
+Then pick the next tagged child:
+
+```bash
+kanban-md pick --claim <agent> --status todo --tags loop-<parent-ID> --move in-progress
+```
+
+If nothing is returned — **no todo children remain → go to [Phase 2: Success End](#phase-2-success-end).**
 
 Note the task ID as `<ID>`. Read the full task:
 
@@ -281,17 +204,19 @@ Then pick again. If the conflict persists, stop and surface it to the user.
 
 ---
 
-### Step 2: Write a plan (auto-proceed — no approval pause)
+### Step 2: Write a plan
 
 For any task that touches tracked code or config:
 
-1. Write the plan to `docs/plans/YYYY-MM-DD-<short-description>.md`.
-   - Include: **goal**, **proposed changes** (with file paths), **open questions** (note them; do not block the loop to resolve them).
+1. Spawn a planner sub-agent to write the plan to `<plans-dir>/YYYY-MM-DD-<slug>.md`
+   - Include: **goal**, **proposed changes** (with file paths), **open questions**
+
+   If there are **open question** in the plan, spawn an oracle sub-agent to attempt answering them, append the
+   answers.  **STOP** and ask user for questions that genuinely block implementation.
 2. Link the plan and the parent task in the task body:
    ```bash
    kanban-md edit <ID> \
-     --append-body "Plan: docs/plans/YYYY-MM-DD-<slug>.md
-   Parent: #<parent-ID>" \
+     --append-body "Plan: <plans-dir>/YYYY-MM-DD-<slug>.md" \
      --timestamp --claim <agent>
    ```
 
@@ -299,7 +224,7 @@ Skip for trivial tasks. Append an audit note instead:
 
 ```bash
 kanban-md edit <ID> \
-  --append-body "Skipped plan (trivial: <reason>). Parent: #<parent-ID>" \
+  --append-body "Skipped plan (trivial: <reason>)." \
   --timestamp --claim <agent>
 ```
 
@@ -463,12 +388,12 @@ Read the `verdict:` line from the review block.
 
 **APPROVE:**
 
-Merge the worktree:
+Merge the worktree to <integration-branch>:
 
 ```bash
+cd <worktree directory>
+wt merge <integration-branch>
 cd <board-home>
-git switch <integration-branch>
-git merge task/<ID>-<slug> --no-ff -m "feat: task #<ID> <description>"
 ```
 
 Run tests and lint on the integration branch (per project instructions)
@@ -571,7 +496,7 @@ Three cycles exhausted without APPROVE → go to **[Phase 3: Blocker End](#phase
 
 ## Phase 2: Success End
 
-`todo` is empty. All tasks have been merged to the integration branch.
+No `todo` children of the parent remain. All have been merged to the integration branch.
 
 From board home, run the full suite on the integration branch (project instructions for definition of done)
 
@@ -684,14 +609,12 @@ Fix the blocking issue, then resume:
 
 ## Resuming After a Blocker
 
-When the user has resolved the blocked task and says something like
-"resume the loop" or "continue from parent task #<parent-ID>":
+Resume is just Phase 0 re-run against the same `<parent-ID>`:
 
-1. Use **Mode B** in Phase 0.
-2. Read the parent task body to identify which tasks were already merged (look for "Task #<ID> merged to …" lines).
-3. The previously blocked task should be back in `todo` (unblocked by the user) or already `done` if the user resolved it manually.
-4. The integration branch already contains all previously merged work — sub-task worktrees will branch off its HEAD automatically.
-5. Pick the next unclaimed `todo` task and proceed from Step 1.
+- The claim guard re-acquires the parent (the prior session's claim has expired or been released).
+- Re-tagging the `todo` children is idempotent — the previously blocked task, once unblocked back into `todo`, gets re-tagged and picked.
+- The integration branch already holds all previously merged work; new task worktrees branch off its HEAD automatically.
+- The parent body's `Task #<ID> merged to …` lines record what already landed.
 
 ---
 
