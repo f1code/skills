@@ -13,6 +13,8 @@ allowed-tools:
   - Bash(go *)
   - Bash(golangci-lint *)
   - Bash(awk *)
+  - Bash(wt *)
+  - Bash(date *)
 ---
 <!-- kanban-md-skill-version: 0.34.0 -->
 
@@ -94,6 +96,13 @@ Defer to the user (leave the task in `review` with a handoff) when you need:
 - a merge conflict that requires judgment (not just mechanical resolution)
 - repeated test/lint failures you can’t resolve
 
+## Slug Derivation
+
+Several places require a `<slug>`. Derive it from the task title: take the first
+3–4 meaningful words, lowercase, replace spaces and punctuation with hyphens,
+max 30 chars. Example: "Refactor user auth flow" → `refactor-user-auth`. Use the
+same `<slug>` for the branch name (`task/<ID>-<slug>`) everywhere in the session.
+
 ## Agent Identity (for claims)
 
 Each agent session must generate a unique name to identify itself for claims. At the very start of a session, run:
@@ -165,12 +174,33 @@ Before creating a worktree, confirm:
 - [ ] User has explicitly approved (e.g. "proceed", "go ahead", "implement")
 - [ ] Open questions in the plan are answered
 
-**Load the `using-git-worktrees` skill first** — it handles the project's worktree-root convention and branch fuzzy-matching. If that skill is not available, fall back to:
+Worktrees use **worktrunk** (`wt`). Always pass `-C <board-home>` (run against
+board home), `-y` (non-interactive), `--no-cd` (capture the path instead of
+changing directory), and `--format json` (read the worktree dir from the `path`
+field). The branch is always `task/<ID>-<slug>`, based off `main`.
+
+Create the worktree:
 
 ```bash
-git worktree add ../kanban-md-task-<ID> -b task/<ID>-<kebab-description>
-cd ../kanban-md-task-<ID>
+wt -C <board-home> -y switch --create task/<ID>-<slug> --base main --no-cd --format json
 ```
+
+On resume (a worktree may already exist), reuse it instead:
+
+```bash
+wt -C <board-home> -y switch task/<ID>-<slug> --no-cd --format json
+```
+
+In both cases, read the `path` field from the JSON output as `<worktree directory>`.
+
+**Then `cd` into it for the worktree shell** — because based implements
+in-session, `--no-cd` means you must change directory yourself:
+
+```bash
+cd <worktree directory>
+```
+
+Use this same `<worktree directory>` as the cwd for the §3.5 review sub-agent.
 
 Skip a worktree only for truly non-conflicting work (e.g., board-only changes or writing an untracked research report). If you touch tracked code/config, use a worktree.
 
@@ -264,6 +294,13 @@ cd <board-home>
 kanban-md edit <ID> --append-body "<review block>" --timestamp --claim <agent>
 ```
 
+Persist the cycle counter (cycle 1 = this initial review) so the 3-cycle budget
+survives context loss / resume:
+
+```bash
+kanban-md edit <ID> --append-body "review_cycle: 1" --timestamp --claim <agent>
+```
+
 Branch on the verdict (the token after `verdict:` on the first line):
 
 - **APPROVE** → append the review block, then hand the task to the user:
@@ -278,7 +315,10 @@ Branch on the verdict (the token after `verdict:` on the first line):
 
 - **CHANGES_REQUESTED** → enter the **autonomous-fix loop**. This is permitted without new user approval because the plan was already approved (§1.5) and your scope is the review's findings — not new functionality. Keep the task in `in-progress` throughout.
 
-  Repeat up to **3 cycles** (the initial review counts as cycle 1):
+  Repeat up to **3 cycles** (the initial review counts as cycle 1). At the top
+  of each cycle, re-read the latest `review_cycle: <N>` line from the task body
+  (`kanban-md show <ID>`) and use it as the current cycle `<k>` (default 1 if
+  absent):
 
   1. **Defer-to-user check.** If fixing any finding needs a product/spec decision, credentials/access, a non-mechanical merge-conflict resolution, or anything else under [Defer-to-User Boundary](#defer-to-user-boundary) — stop the loop and hand off as blocked (below), naming the finding(s).
   2. In the worktree, fix the findings listed in the **latest** review block. Stay within the task's existing scope — do not refactor unrelated code or expand scope.
@@ -286,16 +326,18 @@ Branch on the verdict (the token after `verdict:` on the first line):
      ```bash
      git commit -am "fix(review): address cycle <k> findings for #<ID>"
      ```
-  4. Append a progress note from board home:
+  4. Append a progress note from board home, bumping the persisted counter to
+     `<k+1>` (the upcoming re-review):
      ```bash
      cd <board-home>
-     kanban-md edit <ID> --append-body "Auto-fix cycle <k>: addressed N finding(s); re-reviewing." --timestamp --claim <agent>
+     kanban-md edit <ID> --append-body "Auto-fix cycle <k>: addressed N finding(s); re-reviewing.
+     review_cycle: <k+1>" --timestamp --claim <agent>
      ```
   5. Spawn a **fresh** review sub-agent (new context, same prompt template) and append its returned block to the task body.
   6. Branch on the new verdict:
      - **APPROVE** → follow the APPROVE path above (handoff for merge). Done.
      - **CHANGES_REQUESTED** and cycles remain → go to step 1.
-     - **CHANGES_REQUESTED** and the 3-cycle budget is exhausted → **blocked** (below).
+     - **CHANGES_REQUESTED** at `review_cycle = 3` (budget exhausted) → **blocked** (below).
 
   **Exhausted / blocked** → stop fixing and hand off to the user, following the [Blocked / Needs User Input](#blocked--needs-user-input-the-review-and-move-on-rule) procedure. The findings and all fix cycles are already on the task body:
 
@@ -342,7 +384,7 @@ If `git status` shows unexpected changes outside the board directory (usually `k
 Merge and re-run tests on main:
 
 ```bash
-git merge task/<ID>-<kebab-description>
+git merge task/<ID>-<slug>
 go test ./...
 golangci-lint run ./...
 ```
@@ -380,8 +422,7 @@ git commit -m "chore(board): update task #<ID>"
 ### 7) Optional cleanup
 
 ```bash
-git worktree remove --force ../kanban-md-task-<ID>
-git branch -d task/<ID>-<kebab-description>
+wt -C <board-home> -y remove task/<ID>-<slug> --force --foreground
 ```
 
 ## Blocked / Needs User Input (the “review and move on” rule)

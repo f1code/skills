@@ -20,7 +20,8 @@ allowed-tools:
 Autonomous, sequential loop that processes the entire `todo` column, merging
 each completed task onto a shared integration branch. The loop does not pause
 for plan approval or per-task merge decisions. The only user handoff is at
-the very end: final merge of the integration branch into `main`.
+the very end: final merge of the integration branch into the starting board home
+branch.
 
 Tasks are treated as **sequentially dependent** — task B may depend on task A.
 A single blocker stops the entire loop. No skipping ahead.
@@ -29,8 +30,7 @@ A single blocker stops the entire loop. No skipping ahead.
 
 **This board is shared.** Multiple agents and humans may be working on it simultaneously.
 
-- Another agent may claim a task between the time you list it and try to pick it.
-- Tasks you saw as available moments ago may no longer be available.
+- Another agent may claim a task between the time you list it and pick it; availability you saw moments ago may be gone.
 
 The **claim** mechanic is the coordination primitive. **You MUST claim a task before starting any work on it. You MUST only pick unclaimed tasks.**
 
@@ -41,7 +41,7 @@ The **claim** mechanic is the coordination primitive. **You MUST claim a task be
 - **One active task per loop iteration.** Do not pick the next task until the current one is merged or the loop is stopped.
 - **Never steal a live claim.** If a task shows a claim by a different agent, stop immediately and surface the conflict to the user.
 - **Always leave the board accurate.** Parent task and sub-tasks must reflect actual state at all times.
-- **The loop never touches `main`.** All sub-task merges target the integration branch only.
+- **The loop never touches the starting, board-home branch.** All sub-task merges target the integration branch only (loop/*).
 - **Review cycle max = 3.** After 3 consecutive CHANGES_REQUESTED on one task, stop the entire loop.
 - **Refresh claims to avoid timeout.** For long tasks: `kanban-md edit <ID> --claim <agent>`.
 - **On unexpected failure mid-task: release the claim.** If anything between Steps 2–5 fails unrecoverably, run `kanban-md handoff <ID> --claim <agent> --block "<reason>" --timestamp --release` before stopping. Never leave a dead claim on the board.
@@ -61,8 +61,7 @@ Touching more than one file of tracked code, changing a function signature, API,
 
 - **Always run `kanban-md` from board home** (the canonical repo directory that owns the shared board).
 - **Always do code changes in a task worktree.** Never edit code in board home.
-- Board home must be on `main` except for the brief moment it switches to `<integration-branch>` to run checks at the end of the loop. Always `git switch main` when done with that step.
-- If the board is git-tracked, **commit board changes on `main` as a separate commit** after the integration branch is merged.
+- If the board is git-tracked, **commit board changes on starting, board-home branch as a separate commit** after the integration branch is merged.
 
 At the start of the session, determine and remember `<board-home>`:
 
@@ -89,21 +88,16 @@ Remember this name in your context as `<agent>`. Use it as a literal string in a
 
 ## Locating the review instructions
 
-The review step (Step 5a) hands a fresh sub-agent a review-instructions file
-that ships **inside this skill's own directory**: `reviewing-changes.md`,
-beside the `SKILL.md` you loaded for this skill.
-
-At the start of the session, determine the absolute path to this skill's
-directory (the folder you read this `SKILL.md` from) and remember the file path:
+Step 5a hands the reviewer sub-agent a review-instructions file that ships
+beside this `SKILL.md`. At session start, resolve its path from wherever this
+skill is installed (do not hardcode) and remember it:
 
 ```
 <reviewing-changes-file> = <this-skill-directory>/reviewing-changes.md
 ```
 
-Do NOT hardcode a machine-specific absolute path. Derive it from wherever this
-skill is installed so it stays portable across machines. If the file is missing
-(e.g. a partial install), the review sub-agent falls back to the inline format
-described in Step 5a.
+If the file is missing (partial install), the reviewer falls back to the inline
+format in Step 5a.
 
 ## Expected Review Block Format
 
@@ -146,25 +140,27 @@ Check the user's request for an existing parent task ID (e.g. "use task #42 as p
 
 ### Mode A: Fresh run
 
-Confirm board home is on `main` with a clean working tree:
+Confirm board home is on a clean working tree, and capture the home branch:
 
 ```bash
 cd <board-home>
-git switch main
 git status          # must be clean — stop and report if unexpected changes
+git symbolic-ref --short HEAD   # remember this as <home-branch>
 ```
 
-Create the integration branch off `main`. Derive `<slug>` from the user's stated goal (see Slug Derivation):
+`<home-branch>` is whatever branch board home is currently on (`main`, a
+release branch, etc.). The loop binds to it for this run: the integration
+branch is cut from it and the final merge targets it.
+
+Create the integration branch off current board-home branch. Derive `<slug>` from the user's stated goal (see Slug Derivation):
 
 ```bash
 DATE=$(date +%Y-%m-%d)
 git switch -c loop/${DATE}-<slug>
-git switch main     # return to main immediately; worktrees branch off the integration branch
+git switch -     # return to <home-branch>; worktrees branch off the integration branch
 ```
 
-Remember: `<integration-branch>` = `loop/<YYYY-MM-DD>-<slug>`.
-
-Create the parent kanban task and claim it:
+Remember `<integration-branch>` = `loop/<YYYY-MM-DD>-<slug>`, then create and claim the parent kanban task:
 
 ```bash
 kanban-md add "Loop run: <slug>" \
@@ -192,6 +188,12 @@ Read the parent task in full:
 kanban-md show <parent-ID>
 ```
 
+Capture the home branch as `<home-branch>` (as in Mode A):
+
+```bash
+git symbolic-ref --short HEAD   # remember this as <home-branch>
+```
+
 **Locate or create the integration branch:**
 
 Scan the task body for a line matching `Integration branch: <name>`.
@@ -201,9 +203,8 @@ Scan the task body for a line matching `Integration branch: <name>`.
 
   ```bash
   DATE=$(date +%Y-%m-%d)
-  git switch main
   git switch -c loop/${DATE}-<slug>
-  git switch main
+  git switch -
   kanban-md edit <parent-ID> \
     --append-body "Integration branch: loop/${DATE}-<slug>" \
     --timestamp --claim <agent>
@@ -251,7 +252,7 @@ kanban-md edit <parent-ID> \
 ## Main Loop
 
 Repeat the following until `pick` finds nothing in `todo` or the loop stops on a blocker.
-Board home must be on `main` at the start of every iteration.
+Board home must be on `<home-branch>` at the start of every iteration.
 
 ### Step 1: Pick a task
 
@@ -259,7 +260,6 @@ From board home:
 
 ```bash
 cd <board-home>
-git branch --show-current     # confirm: must show "main"
 kanban-md pick --claim <agent> --status todo --move in-progress
 ```
 
@@ -305,22 +305,39 @@ kanban-md edit <ID> \
 
 ---
 
-### Step 3: Create a worktree
+### Step 3: Create a worktree (worktrunk `wt`)
 
-Before creating a worktree, check whether one already exists for this task ID (possible on resume after a blocker):
+Worktrees use **worktrunk** (`wt`). Always pass `-C <board-home>` (run against
+board home), `-y` (non-interactive), `--no-cd` (loop drives subagents by path),
+and `--format json` (capture the worktree dir from the `path` field).
+
+The branch is always `task/<ID>-<slug>`. Check if a worktree already exists
+(possible on resume after a blocker):
 
 ```bash
-git worktree list | grep "task/<ID>"
+wt -C <board-home> list --format json | grep "task/<ID>"
 ```
 
-The branch name should be `task/<ID>-<slug>`.  Check if it is strictly ahead of the **integration branch HEAD**.
+- **Not found** — create it off **integration branch HEAD** (via `--base`):
 
-- **Not found**: create it, branched off **the integration branch HEAD** (not `main`).  
-Name the branch `task/<ID>-<slug>`.  Use git worktree skill or project instructions.
-Note worktree directory
+  ```bash
+  wt -C <board-home> -y switch --create task/<ID>-<slug> \
+    --base <integration-branch> --no-cd --format json
+  ```
 
-- **Found with the correct branch**: reuse it — just note the path (worktree directory)
-- **Found with a stale/wrong branch**: STOP and ask user how to proceed
+  Note the `path` field as `<worktree directory>`.
+
+- **Found, correct branch** — reuse it (omit `--create` to resolve its path):
+
+  ```bash
+  wt -C <board-home> -y switch task/<ID>-<slug> --no-cd --format json
+  ```
+
+  Note `path` as `<worktree directory>`. Confirm the branch is strictly ahead
+  of the **integration branch HEAD** (carries unmerged work to resume); if not,
+  treat it as a fresh start.
+
+- **Found with a stale/wrong branch**: STOP and ask user how to proceed.
 
 
 > **Why integration HEAD, not main?** Tasks are sequentially dependent. Branching off the integration HEAD means each task inherits all prior merged work, minimising conflicts at merge time.
@@ -396,7 +413,7 @@ kanban-md show <ID>
 
 Look for the most recent `review_cycle: <N>` line in the body. Use that value as `review_cycle`. If no such line exists, default to `1`.
 
-#### 5a — Spawn fresh-context self-review sub-agent
+#### 5a — Spawn fresh-context reviewer sub-agent
 
 Pass the following prompt. The sub-agent must run from the worktree (set its working directory to `<absolute-worktree-path>`):
 
@@ -446,7 +463,7 @@ Read the `verdict:` line from the review block.
 
 **APPROVE:**
 
-Switch board home to the integration branch and merge:
+Merge the worktree:
 
 ```bash
 cd <board-home>
@@ -459,7 +476,7 @@ Run tests and lint on the integration branch (per project instructions)
 **If merge or tests fail:**
 
 ```bash
-git switch main   # restore board-home branch before doing anything else
+git switch <home-branch>   # restore board-home branch before doing anything else
 ```
 
 → Go to **[Phase 3: Blocker End](#phase-3-blocker-end)** with reason "merge/test failure after APPROVE on task #<ID>".
@@ -467,7 +484,7 @@ git switch main   # restore board-home branch before doing anything else
 **If clean:**
 
 ```bash
-git switch main
+git switch <home-branch>
 kanban-md edit <ID> --release
 kanban-md move <ID> done
 kanban-md edit <parent-ID> \
@@ -475,11 +492,11 @@ kanban-md edit <parent-ID> \
   --timestamp --claim <agent>
 ```
 
-Clean up worktree and force-delete the task branch (it was merged into the integration branch, not main, so `-d` would fail):
+Clean up the worktree and delete the task branch (`--force-delete`: the branch
+isn't merged into `<home-branch>`, so a plain delete would fail):
 
 ```bash
-git worktree remove --force <worktree directory>
-git branch -D task/<ID>-<slug>
+wt -C <board-home> -y remove task/<ID>-<slug> --force --foreground
 ```
 
 → **Continue loop (back to Step 1).**
@@ -532,7 +549,7 @@ notes: <details>
 After the sub-agent returns:
 
 - **`status: FAILED`** → go to **[Phase 3: Blocker End](#phase-3-blocker-end)** with reason "fix implementation failed on task #<ID> cycle <review_cycle>: <reason>".
-- **`status: SUCCESS`** → compute the next cycle number (e.g. if review_cycle is 2, next is 3). Persist it and append a progress note from board home:
+- **`status: SUCCESS`** → increment `review_cycle`, persist it, and append a progress note from board home:
 
 ```bash
 cd <board-home>
@@ -558,10 +575,10 @@ Three cycles exhausted without APPROVE → go to **[Phase 3: Blocker End](#phase
 
 From board home, run the full suite on the integration branch (project instructions for definition of done)
 
-Return to `main` before touching the board:
+Return to `<home-branch>` before touching the board:
 
 ```bash
-git switch main
+git switch <home-branch>
 ```
 
 Move the parent task to `review` and release:
@@ -570,7 +587,7 @@ Move the parent task to `review` and release:
 kanban-md handoff <parent-ID> --claim <agent> \
   --note "Loop complete. All todo tasks merged to <integration-branch>.
 Tests on integration branch: <pass/fail>.
-Ready for final review and merge to main." \
+Ready for final review and merge to <home-branch>." \
   --timestamp --release
 ```
 
@@ -587,10 +604,10 @@ Tests on integration branch: <pass / fail + details>
 Parent task: #<parent-ID>
 
 Review the integration branch, then say:
-  "merge <integration-branch> to main"
+  "merge <integration-branch> to <home-branch>"
 ```
 
-If the board is git-tracked (check with `git -C <board-home> ls-files kanban/` — non-empty output means tracked), commit board changes on `main`:
+If the board is git-tracked (check with `git -C <board-home> ls-files kanban/` — non-empty output means tracked), commit board changes on `<home-branch>`:
 
 ```bash
 git add kanban/
@@ -608,11 +625,11 @@ The loop has stopped due to an unresolvable issue on task `<ID>`.
 - Merge into integration branch failed (conflict)
 - Tests/lint on integration branch failed after merge
 
-**Ensure board home is on `main` before touching the board:**
+**Ensure board home is on `<home-branch>` before touching the board:**
 
 ```bash
 cd <board-home>
-git switch main
+git switch <home-branch>
 ```
 
 Hand off the blocked sub-task:
