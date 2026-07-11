@@ -3,9 +3,9 @@
   "target": "global",
   "installPath": "/Users/ngaller@4gclinical.com/.agents/skills/twg-status-rollups",
   "binaryPath": "/Users/ngaller@4gclinical.com/.local/bin/twg-bin",
-  "installedAt": "2026-06-02T15:04:11.403Z",
-  "installedVersion": "1.0.1",
+  "installedAt": "2026-06-30T16:25:56.867Z",
+  "installedVersion": "1.0.18",
   "buildProfile": "external",
-  "buildCommit": "771d92ebc63d",
-  "builtAt": "2026-05-21T16:35:38.872Z"
+  "buildCommit": "07e1858a5dfb",
+  "builtAt": "2026-06-26T03:58:52.921Z"
 }

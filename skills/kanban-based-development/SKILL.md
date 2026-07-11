@@ -15,6 +15,7 @@ allowed-tools:
   - Bash(awk *)
   - Bash(wt *)
   - Bash(date *)
+disable-model-invocation: true
 ---
 <!-- kanban-md-skill-version: 0.34.0 -->
 
@@ -127,20 +128,16 @@ git switch main
 git status
 ```
 
+'Pick the next task' anywhere below means return to step 1 and repeat this loop.
+
 ### 1) Pick and claim (atomically)
 
 From board home:
 
-Pick only from startable columns to avoid accidentally re-picking `review` work:
+Pick only from todo tasks to avoid accidentally re-picking `review` work:
 
 ```bash
 kanban-md pick --claim <agent> --status todo --move in-progress
-```
-
-If `todo` is empty:
-
-```bash
-kanban-md pick --claim <agent> --status backlog --move in-progress
 ```
 
 This is atomic — if another agent claims the task between your list and claim, `pick` handles it safely. No need to list/choose/claim manually.

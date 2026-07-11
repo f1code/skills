@@ -1,9 +1,9 @@
 ---
 name: kanban-loop-development
 description: >
-  Use when asked to "run the kanban loop on a parent task", "work through the
-  children of task X", "process the subtasks of an epic", or "loop through a
-  parent task's todo children autonomously". A parent task ID is required.
+  Autonomous, sequential loop that processes the `todo` children of a required parent task,
+  merging each completed child onto a shared integration branch.
+  A parent task ID is required.
 allowed-tools:
   - Bash(kanban-md *)
   - Bash(kbmd *)
@@ -12,6 +12,7 @@ allowed-tools:
   - Bash(golangci-lint *)
   - Bash(awk *)
   - Bash(date *)
+disable-model-invocation: true
 ---
 <!-- kanban-md-skill-version: 0.34.0 -->
 
@@ -131,7 +132,7 @@ task ID, stop and ask for one — do not invent or auto-create a parent.
    current branch as `<home-branch>`. The integration branch is cut from it and
    the final merge targets it.
 
-2. **Plans dir** Resolve from project or global conventions, store absolute path in
+2. **Plans dir.** Resolve from project or global conventions, store path relative to <board-home> in
    `<plans-dir>`.
 
 3. **Read the parent.** `kanban-md show <parent-ID>`.
@@ -206,17 +207,40 @@ Then pick again. If the conflict persists, stop and surface it to the user.
 
 ### Step 2: Write a plan
 
+If the task already has a linked, detailed implementation plan, **SKIP** this step.  Note the absolute plan path: `<plan-path>`
+
 For any task that touches tracked code or config:
 
-1. Spawn a planner sub-agent to write the plan to `<plans-dir>/YYYY-MM-DD-<slug>.md`
-   - Include: **goal**, **proposed changes** (with file paths), **open questions**
+1. Set `<plan-path>` to  `<plans-dir>/YYYY-MM-DD-<slug>.md` (plan path, relative to <board-home>)
+2. Spawn a planner sub-agent to write a detailed implementation plan.  Pass
+   the following prompt:
+   ```
+   Review the task at `kanban-md show <ID>`.
+   Write a detailed implementation plan at <plan-path>.
+   Do not edit code or the board, only the plan file.
+   Include: **goal**, **proposed changes** (with file paths), **open questions**
+   ```
 
-   If there are **open question** in the plan, spawn an oracle sub-agent to attempt answering them, append the
-   answers.  **STOP** and ask user for questions that genuinely block implementation.
-2. Link the plan and the parent task in the task body:
+3. If there are **open question** in the plan, spawn an oracle sub-agent to answer them.  Pass the following prompt:
+   ```
+    Review the plan at <plan-path>, together with the kanban task at `kanban-md show <ID>`
+    Attempt answering open questions unless they genuinely require a user decision
+    Do not edit code or the board, only the plan file.
+    Return a result block in this exact format:
+
+   status: RESOLVED        # all questions answered/non-blocking, answers appended to plan
+   # or
+   status: BLOCKED
+   blocking-questions:
+     - <question>
+   ```
+
+   **STOP** and ask user if Oracle returns a BLOCKED status.
+
+3. Link the plan and the parent task in the task body:
    ```bash
    kanban-md edit <ID> \
-     --append-body "Plan: <plans-dir>/YYYY-MM-DD-<slug>.md" \
+     --append-body "Plan: <plan-path>" \
      --timestamp --claim <agent>
    ```
 
@@ -283,7 +307,7 @@ Inputs:
 - Task ID: <ID>
 - Task title: <title>
 - Task description: <full description from task body>
-- Plan: <plan path, or "trivial — no plan">
+- Plan: <board-home>/<plan-path>, or "trivial — no plan"
 - Integration branch: <integration-branch>
 - Task branch: task/<ID>-<slug>
 - Worktree path: <worktree directory>
@@ -392,7 +416,7 @@ Merge the worktree to <integration-branch>:
 
 ```bash
 cd <worktree directory>
-wt merge <integration-branch>
+wt merge <integration-branch>  # will merge the worktree branch onto integration branch
 cd <board-home>
 ```
 

@@ -1,7 +1,7 @@
 {
   "skillName": "twg",
   "target": "global",
-  "installPath": "/Users/ngaller@4gclinical.com/.agents/skills/twg-context-discovery",
+  "installPath": "/Users/ngaller@4gclinical.com/.agents/skills/twg-jira",
   "binaryPath": "/Users/ngaller@4gclinical.com/.local/bin/twg-bin",
   "installedAt": "2026-06-30T16:25:56.867Z",
   "installedVersion": "1.0.18",
