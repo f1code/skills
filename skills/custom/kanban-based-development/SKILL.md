@@ -102,7 +102,7 @@ Defer to the user (leave the task in `review` with a handoff) when you need:
 Several places require a `<slug>`. Derive it from the task title: take the first
 3–4 meaningful words, lowercase, replace spaces and punctuation with hyphens,
 max 30 chars. Example: "Refactor user auth flow" → `refactor-user-auth`. Use the
-same `<slug>` for the branch name (`task/<ID>-<slug>`) everywhere in the session.
+same `<slug>` for the branch name everywhere in the session.
 
 ## Agent Identity (for claims)
 
@@ -171,21 +171,22 @@ Before creating a worktree, confirm:
 - [ ] User has explicitly approved (e.g. "proceed", "go ahead", "implement")
 - [ ] Open questions in the plan are answered
 
+Determine the branch name: use repo convention, or `task/<ID>-<slug>`.  Save that as <branch-name>.
 Worktrees use **worktrunk** (`wt`). Always pass `-C <board-home>` (run against
 board home), `-y` (non-interactive), `--no-cd` (capture the path instead of
 changing directory), and `--format json` (read the worktree dir from the `path`
-field). The branch is always `task/<ID>-<slug>`, based off `main`.
+field).
 
 Create the worktree:
 
 ```bash
-wt -C <board-home> -y switch --create task/<ID>-<slug> --base main --no-cd --format json
+wt -C <board-home> -y switch --create <branch-name> --base main --no-cd --format json
 ```
 
 On resume (a worktree may already exist), reuse it instead:
 
 ```bash
-wt -C <board-home> -y switch task/<ID>-<slug> --no-cd --format json
+wt -C <board-home> -y switch <branch-name> --no-cd --format json
 ```
 
 In both cases, read the `path` field from the JSON output as `<worktree directory>`.
@@ -277,7 +278,7 @@ Inputs:
 - Task ID: <ID>
 - Plan: <path read from the task body>
 - Base ref: main
-- Head ref / branch: task/<ID>-<slug>
+- Head ref / branch: <branch-name>
 - Worktree path: <absolute path; this is your cwd>
 
 Return only the markdown review block (no commentary before or after).
@@ -304,7 +305,7 @@ Branch on the verdict (the token after `verdict:` on the first line):
 
   ```bash
   kanban-md handoff <ID> --claim <agent> \
-    --note "Review APPROVED. Ready to merge: task/<ID>-<slug>" \
+    --note "Review APPROVED. Ready to merge: <branch-name>" \
     --timestamp --release
   ```
 
@@ -343,7 +344,7 @@ Branch on the verdict (the token after `verdict:` on the first line):
     --block "Auto-fix exhausted after 3 cycles" \
     --note "## Handoff
 - Remaining findings: see latest review block in task body
-- Branch: task/<ID>-<slug>
+- Branch: <branch-name>
 - What I tried: <one line per cycle>
 - Next step: <decision/access the user must provide, if any>" \
     --timestamp --release
@@ -381,7 +382,7 @@ If `git status` shows unexpected changes outside the board directory (usually `k
 Merge and re-run tests on main:
 
 ```bash
-git merge task/<ID>-<slug>
+git merge <branch-name>
 go test ./...
 golangci-lint run ./...
 ```
@@ -419,7 +420,7 @@ git commit -m "chore(board): update task #<ID>"
 ### 7) Optional cleanup
 
 ```bash
-wt -C <board-home> -y remove task/<ID>-<slug> --force --foreground
+wt -C <board-home> -y remove <branch-name> --force --foreground
 ```
 
 ## Blocked / Needs User Input (the “review and move on” rule)

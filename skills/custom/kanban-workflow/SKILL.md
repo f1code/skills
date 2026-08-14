@@ -36,7 +36,7 @@ Remember this name in your context as `<agent>`. Use it as a literal string in a
 ### Step 1: Pick a task
 
 ```bash
-kanban-md pick --claim <agent> --status todo --move in-progress --json | jq -r .id
+kanban-md pick --claim <agent> --status todo --tag ready-for-agent --move in-progress --json | jq -r .id
 ```
 
 If you cannot pick a task (result is null), **STOP** and notify user.

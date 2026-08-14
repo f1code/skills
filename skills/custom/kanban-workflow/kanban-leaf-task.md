@@ -51,10 +51,12 @@ kanban-md show <parent-task-id> | grep "Integration branch:"
 ```
 
 If this fails to return an explicit integration branch, **stop** and ask the user.
+Note the branch as <integration-branch>.
 
 ### If no parent task
 
 The integration branch is the current working branch.
+Note the branch as <integration-branch>.
 
 ## Step 2: Create or review the plan
 
@@ -78,6 +80,7 @@ wt switch --create task/<task-id>-<slug> -y --no-cd --format json | jq -r .path
 ```
 
 ALL your changes must be done in the returned directory.
+Save this directory in your context as <worktree directory>.
 
 ## Step 4: Implement
 
