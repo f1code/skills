@@ -1,11 +1,14 @@
 ---
 name: kanban-workflow
 description: >
-  Default workflow for executing tasks tracked on a kanban-md board.
+  Default workflow for executing a kanban-md task tree: recurse into children,
+  fan out parallel leaves into herdr panes, gate every merge on the user.
 allowed-tools:
   - Bash(kanban-md *)
   - Bash(kbmd *)
   - Bash(git *)
+  - Bash(wt *)
+  - Bash(herdr *)
   - Bash(go *)
   - Bash(golangci-lint *)
   - Bash(awk *)
@@ -13,49 +16,129 @@ allowed-tools:
 disable-model-invocation: true
 ---
 
+# Kanban Workflow
+
+One invocation handles one task tree, to whatever depth it has. Recursion is
+manual per level — the coordinator at each level launches its own children and
+waits on them; there is no top-level loop draining the board. After the named
+task's tree is fully handled, report and exit.
+
 ## Multi-Agent Environment
 
-**This board is shared.** Multiple agents and humans may be working on it simultaneously.
+**This board is shared.** Multiple agents and humans may be working on it
+simultaneously. Availability seen a moment ago may be gone. The **claim**
+mechanic is the coordination primitive: claim before touching a task, and only
+touch tasks you hold the claim on.
 
-- Another agent may claim a task between the time you list it and pick it; availability you saw moments ago may be gone.
+## Board Directory
 
-The **claim** mechanic is the coordination primitive. **You MUST claim a task before starting any work on it. You MUST only pick unclaimed tasks.**
+Under the standard project layout the board sits at the project root
+(a sibling of `main/` and `worktrees/`), untracked by git. `kanban-md` finds it
+by walking upward from the current directory, so no `--dir` flag is normally
+needed.
+
+**Guard, once at setup:**
+
+```bash
+git -C . ls-files --error-unmatch kanban >/dev/null 2>&1
+```
+
+If this succeeds (the board is tracked/inside the repo), every worktree would
+get its own diverging copy. In that case resolve the board's absolute path
+now and pass `--dir <board-dir>` on every `kanban-md` call for the rest of
+this session, and to every child as a sixth parameter.
 
 ## Agent Identity
-
-Generate a unique name at the start of the session:
 
 ```bash
 kanban-md agent-name
 ```
 
-Remember this name in your context as `<agent>`. Use it as a literal string in all claim/release commands for the rest of the session.
+Remember this as `<agent>`. Use it literally in every `--claim`/`--release`
+for the rest of the session.
 
-## Workflow
+## Step 1: Pick the invocation task
 
-### Step 1: Pick a task
-
-```bash
-kanban-md pick --claim <agent> --status todo --tag ready-for-agent --move in-progress --json | jq -r .id
-```
-
-If you cannot pick a task (result is null), **STOP** and notify user.
-Otherwise note the result in your context as `task-id` 
-
-### Step 2: Determine if the task has children
-
-Number of children:
+If the user gave a task id, claim it directly:
 
 ```bash
-kanban-md list --parent <task-id> --json | jq '. | length'
+kanban-md edit <task-id> --claim <agent> --status in-progress
 ```
 
-### Step 3a: IF THE TASK HAS CHILDREN (PARENT TASK)
+Otherwise:
 
-Execute the instructions in [kanban-parent-task](./kanban-parent-task.md), providing: <task-id> as parent task ID, <agent> as Agent Identity.
+```bash
+kanban-md pick --claim <agent> --status todo --move in-progress
+```
 
-### Step 3b: IF THE TASK HAS NO CHILDREN (LEAF TASK)
+If nothing is returned, **STOP** and notify the user. Note the id as
+`<task-id>` and read it:
 
-Execute the instructions in [kanban-leaf-task](./kanban-leaf-task.md), providing: <task-id> as task ID, <agent> as Agent Identity.
+```bash
+kanban-md show <task-id>
+```
 
-### Step 4: Go back to step 1
+## Step 2: Plan gate (named task only)
+
+This gate applies **only** to `<task-id>` itself — never to a recursive
+child, which was authored with its own full spec, rationale, and acceptance
+criteria at grilling time (re-interviewing it would just re-litigate settled
+decisions).
+
+Confirm:
+
+- [ ] A plan is linked from the task body, or the body is itself a complete spec
+- [ ] User has explicitly approved (e.g. "proceed", "go ahead", "implement")
+- [ ] Open questions are answered
+
+If not, run `/grilling` on `<task-id>` now. Do not create any worktree or
+branch before this gate passes.
+
+## Step 3: Does it have children?
+
+```bash
+kanban-md list --parent <task-id> --json | jq 'length'
+```
+
+### Children exist → this task is a parent
+
+Follow **`kanban-parent-task.md`** (in this skill's directory) with
+`<task-id>` as the parent. That file owns branch creation, fan-out, review
+gating, and merges for the whole subtree.
+
+### No children → this task is a leaf, and it is the invocation itself
+
+Decision: the coordinator implements this one leaf **inline**, in its own
+context — no pane, because one invocation claims one task, so there is no
+context-pollution risk. It still owns `wt` itself (leaves reached via
+recursion never do; this is the one exception, since here the coordinator
+*is* the leaf).
+
+1. Determine `<parent-branch>`: if `<task-id>` has a parent, read
+   `Integration branch: <name>` from the parent's body; otherwise it's the
+   current board-home branch.
+2. Create or reuse the worktree (see "Branch and worktree naming" in
+   `kanban-parent-task.md` for slug/naming rules):
+   ```bash
+   wt switch --create task/<task-id>-<slug> --base <parent-branch> --no-cd --format json
+   ```
+   Record `Branch: task/<task-id>-<slug>` in the task body.
+3. Implement, self-review, and hand off exactly as described in
+   `kanban-leaf-task.md`, Steps 1–2 (skip its worktree-creation
+   precondition — you just did that yourself). Do this inline, not in a pane.
+4. On `APPROVE` (or after the fix loop settles), present the verdict block and
+   `git diff --stat` against the merge-base to the user and wait for
+   go-ahead.
+5. On go-ahead, merge:
+   ```bash
+   wt merge -C <worktree-path> -y <parent-branch>
+   ```
+6. Mark done:
+   ```bash
+   kanban-md edit <task-id> --release --status done
+   ```
+
+## Step 4: Report and exit
+
+No draining loop. Report what merged, what's in `review` waiting on the
+user, and what's `blocked`. Exit.

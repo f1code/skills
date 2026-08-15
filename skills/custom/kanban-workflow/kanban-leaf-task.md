@@ -1,7 +1,7 @@
 ---
 name: kanban-leaf-task
 description: >
-  Work on a child or standalone task.
+  Work on a child or standalone task with no children of its own.
 allowed-tools:
   - Bash(kanban-md *)
   - Bash(kbmd *)
@@ -15,159 +15,128 @@ disable-model-invocation: true
 
 # Pre-requisites
 
-## Agent Identity
+## Provided Parameters
 
-The Agent Identity must be provided to you as <agent>.  Use this in all kanban-md commands: `--claim <agent>`.
-**STOP** if the agent identity is not explicitly provided.
+The Agent Identity must be provided to you as `<agent>`. Use this in all
+kanban-md commands: `--claim <agent>`.
+The Parent Branch must be provided to you as `<parent-branch>` (this is the
+integration branch you diff and eventually merge against — not the
+structural kanban parent field).
+The Worktree Branch must be provided to you as `<worktree-branch>`.
+The Worktree Path must be provided to you as `<worktree-path>`.
+The Task ID must be provided to you as `<task-id>`.
+The Board Directory may be provided to you as `<board-dir>` — only when the
+coordinator's board-location guard fired. If given, pass `--dir <board-dir>`
+on every `kanban-md` call below.
 
-## Task ID
+**STOP** if any of the first five parameters is not explicitly provided.
 
-The Task ID must be provided to you as <task-id>.
-**STOP** if the Task ID is not explicitly provided.
+You do not call `wt` at all. The coordinator already created
+`<worktree-path>` on `<worktree-branch>` and owns every merge; you only write
+code and hand off.
 
 ## Task Slug
 
-Several places require a `<slug>`. Derive it from the task title: take the first
-3–4 meaningful words, lowercase, replace spaces and punctuation with hyphens,
-max 30 chars. Example: "Refactor user auth flow" → `refactor-user-auth`. Use the
-same `<slug>` for the branch name (`task/<task-id>-<slug>`) everywhere in the session.
+Several places require a `<slug>`. Derive it from the task title: take the
+first 3–4 meaningful words, lowercase, replace spaces and punctuation with
+hyphens, max 30 chars. Example: "Refactor user auth flow" → `refactor-user-auth`.
 
 # Main Workflow
 
-## Step 1: Determine integration branch
+## Step 1: Implement
 
-Check parent task:
+Ensure ALL changes are made on `<worktree-branch>`, in `<worktree-path>`.
+Implement the smallest change that satisfies the task, depending on the task
+type:
 
-```bash
-kanban-md show <task-id> --json | jq .parent
-```
+- development task: use the /implement skill
+- prototype task: use the /prototype skill
+- research task: use the /research skill
 
-### If there is a parent task
+Append progress notes to the task body using the "Progress notes" section in
+References.
 
-Read it's body to find the integration branch:
+Your fixed point for code review is `git merge-base HEAD <parent-branch>` —
+not `<parent-branch>` HEAD itself, which moves as siblings merge and would
+show this task's diff *minus* a sibling's already-landed work.
 
-```bash
-kanban-md show <parent-task-id> | grep "Integration branch:"
-```
-
-If this fails to return an explicit integration branch, **stop** and ask the user.
-Note the branch as <integration-branch>.
-
-### If no parent task
-
-The integration branch is the current working branch.
-Note the branch as <integration-branch>.
-
-## Step 2: Create or review the plan
-
-Before creating a worktree, confirm:
-
-- [ ] Plan file exists (or plan is included in task body)
-- [ ] Plan is linked from the task body, if separate plan file
-- [ ] User has explicitly approved (e.g. "proceed", "go ahead", "implement")
-- [ ] Open questions in the plan are answered
-
-Otherwise, use /grilling to complete the plan.
-
-Use an Oracle sub-agent to review the plan.  Stop and ask the user if there are open questions.
-
-## Step 3: Create or switch to the worktree
-
-To create the worktree and return its sub-directory:
-
-```bash
-wt switch --create task/<task-id>-<slug> -y --no-cd --format json | jq -r .path
-```
-
-ALL your changes must be done in the returned directory.
-Save this directory in your context as <worktree directory>.
-
-## Step 4: Implement
-
-Ensure ALL changes are made on the worktree branch from step 2.
-Implement the smallest change that satisfies the task, depending on the task type:
-
- - development task: use the /implement skill
- - prototype task: use the /prototype skill
- - research task: use the /research skill
-
-Append progress notes to the task body usin the "Progress Notes" section in References.
-Your fixed point for code review is the integration branch determined in the first step.
-When running a code review, append the entire returned block to the task body:
+Run the self-review per "Self-review" in References. When it returns, append
+the entire verdict block to the task body:
 
 ```bash
 kanban-md edit <task-id> --append-body "<review block>" --timestamp --claim <agent>
 ```
 
-## Step 5: Hand off for user review
+Bounded fix loop: on `CHANGES_REQUESTED`, fix the findings and re-review, up
+to 3 cycles total. If cycle 3 still returns `CHANGES_REQUESTED`, hand off
+blocked with the last verdict block (see "Blocked / Needs User Input") instead
+of proceeding to Step 2.
 
-Use the project's "Definition of Done" to ensure the task is ready for review.
+## Step 2: Hand off for merge
 
-Mark the task in review with:
-
-```bash
-kanban-md handoff <task-id> --claim <agent>
-```
-
-Wait for user's confirmation to proceed.
-
-## Step 6: Merge to integration branch
-
-Ask the user:
-
- - merge locally to <integration-branch>
- - create a pull request
- - leave unmerged (appropriate for prototype or research tasks)
-
-#### 6.1 Merge locally
-
-If user approves the merge
+Use the project's "Definition of Done" to confirm the task is ready. Hand off
+— do **not** merge yourself; the coordinator merges every child from board
+home, one at a time, so the integration branch has a single writer:
 
 ```bash
-cd <worktree directory>
-wt merge -y --no-cd <integration-branch>  # will merge the worktree branch onto integration branch
-cd <board-home>
+kanban-md handoff <task-id> --claim <agent> --release \
+  --note "Ready for merge. Verdict: <APPROVE|CHANGES_REQUESTED after N cycles>." \
+  --timestamp
 ```
 
-Then proceed to step 7.
+This moves the task to `review` and releases your claim — that release is
+what tells the coordinator's `pick --status todo` this task is no longer
+in flight. Stop here. The coordinator picks up the merge decision with the
+user and either merges (task ends `done`) or sends you feedback by re-prompting
+this same pane, or moves the task back to `todo` for a fresh pick if the pane
+already exited.
 
-#### 6.2 Pull request
+# References
 
-Use the `gh` or `twg` CLI to create a pull request.
-Then mark the task as **Blocked**: Waiting for merge.  Use the `Blocked / Needs User Input` reference.
+## Self-review
 
-## Step 7: Complete the task
+Before handing off, run an independent self-review. Spawn a fresh-context
+sub-agent with cwd set to `<worktree-path>`, and have it read
+`reviewing-changes.md` (bundled beside this file, in the same skill
+directory) for the full checklist and output contract. Inputs to give it:
 
-If the task was completed successfully, mark the task as done:
+- Task ID: `<task-id>`
+- Plan: whatever is linked from the task body, or "trivial — no plan"
+- Base ref: `git merge-base HEAD <parent-branch>` (compute this first, pass
+  the resolved SHA)
+- Head ref / branch: `<worktree-branch>`
+- Worktree path: `<worktree-path>`
 
-```bash
-kanban-md edit <task-id> --release --status done
-```
-
-# References 
+If `reviewing-changes.md` is missing, fall back to: first line
+`verdict: APPROVE` or `verdict: CHANGES_REQUESTED`, second line
+`counts: critical=<n> important=<n> suggestion=<n>`, then `## Strengths` and
+a `## Findings` list tagged `[CRITICAL]`, `[IMPORTANT]`, or `[SUGGESTION]`.
 
 ## Progress notes
 
-While a task is `in-progress`, leave short timestamped notes in the task body from **board home** (especially after major steps or before/after running tests). This makes handoffs and reviews much faster.
+While a task is `in-progress`, leave short timestamped notes in the task body
+(especially after major steps or before/after running tests). This makes
+handoffs and reviews much faster.
 
 ```bash
 kanban-md edit <task-id> --append-body "Implemented X/Y/Z, now running tests." --timestamp --claim <agent>
 ```
 
-The `--append-body` (`-a`) flag appends text to the existing body without replacing it. The `--timestamp` (`-t`) flag prefixes a timestamp line like `[[2026-02-10]] Mon 15:04`.
+The `--append-body` (`-a`) flag appends text to the existing body without
+replacing it. The `--timestamp` (`-t`) flag prefixes a timestamp line like
+`[[2026-02-10]] Mon 15:04`.
 
 ## Blocked / Needs User Input
 
-If you cannot continue without the user (decision, access, environment, or anything outside your control):
-
-From board home:
+If you cannot continue without the user (decision, access, environment, or
+anything outside your control):
 
 ```bash
-kanban-md handoff <ID> --claim <agent> \
+kanban-md handoff <task-id> --claim <agent> \
   --block "Waiting on user: <what you need>" \
   --note "## Handoff
 - Current state:
-- Branch (if any):
+- Branch: <worktree-branch>
 - Open questions (A/B):
 - Next step:" \
   --timestamp --release
