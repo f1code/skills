@@ -35,12 +35,6 @@ You do not call `wt` at all. The coordinator already created
 `<worktree-path>` on `<worktree-branch>` and owns every merge; you only write
 code and hand off.
 
-## Task Slug
-
-Several places require a `<slug>`. Derive it from the task title: take the
-first 3–4 meaningful words, lowercase, replace spaces and punctuation with
-hyphens, max 30 chars. Example: "Refactor user auth flow" → `refactor-user-auth`.
-
 # Main Workflow
 
 ## Step 1: Implement
@@ -106,11 +100,6 @@ directory) for the full checklist and output contract. Inputs to give it:
   the resolved SHA)
 - Head ref / branch: `<worktree-branch>`
 - Worktree path: `<worktree-path>`
-
-If `reviewing-changes.md` is missing, fall back to: first line
-`verdict: APPROVE` or `verdict: CHANGES_REQUESTED`, second line
-`counts: critical=<n> important=<n> suggestion=<n>`, then `## Strengths` and
-a `## Findings` list tagged `[CRITICAL]`, `[IMPORTANT]`, or `[SUGGESTION]`.
 
 ## Progress notes
 
