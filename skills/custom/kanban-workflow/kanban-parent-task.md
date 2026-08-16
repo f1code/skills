@@ -2,13 +2,15 @@
 name: kanban-parent-task
 description: >
   Coordinate the children of a parent task: fan out up to 3 in parallel via
-  herdr panes, gate every merge on the user, recurse into sub-epics.
+  a pane driver (herdr or kitty), gate every merge on the user, recurse into
+  sub-epics.
 allowed-tools:
   - Bash(kanban-md *)
   - Bash(kbmd *)
   - Bash(git *)
   - Bash(wt *)
   - Bash(herdr *)
+  - Bash(kitten *)
   - Bash(go *)
   - Bash(golangci-lint *)
   - Bash(awk *)
@@ -24,11 +26,9 @@ entirely its children's. Never merges itself into anything past this
 invocation; that is the outer coordinator's job if this parent is itself a
 child (see "Recursing into a sub-epic" below).
 
-## Provided parameters
-
-`<parent-id>` and `<agent>` must be provided. `<board-dir>` (only if the board
-guard in `SKILL.md` fired) is a third. **STOP** if `<parent-id>` or `<agent>`
-is missing.
+`<parent-id>`, `<agent>`, and `<driver>` (`herdr` or `kitty`) must be
+provided. `<board-dir>` (only if the board guard in `SKILL.md` fired) is a
+fourth. **STOP** if `<parent-id>`, `<agent>`, or `<driver>` is missing.
 
 ## Setup
 
@@ -71,16 +71,76 @@ Precedence, applied once per task:
 `<slug>`: first 3–4 meaningful words of the title, lowercased, spaces/punct
 → hyphens, max 30 chars.
 
-## Agent kind for children
+## Pane driver
 
-Resolve once:
+All child-spawning and settle-detection goes through five driver operations.
+Everything else in this file is driver-agnostic.
+
+| Op | Inputs | Output |
+|---|---|---|
+| `resolve-kind` | — | agent kind for children |
+| `spawn` | worktree path, child name `kb-<id>`, kind, prompt | handle (pane/window id) |
+| `focus` | child name | — |
+| `notify` | title | — |
+| `read-output` | child name | recent terminal text |
+
+There is no `wait` operation — see Step 4.
+
+### herdr
+
+| Op | Call |
+|---|---|
+| `resolve-kind` | `herdr agent get "$HERDR_PANE_ID"` |
+| `spawn` | `new_pane_id=$(herdr pane split --direction down --cwd <worktree-path> \| jq -r '.result.pane.pane_id')`, then `herdr agent start kb-<child-id> --kind <kind> --pane "$new_pane_id"`, then `herdr agent prompt kb-<child-id> "<filled prompt>"` |
+| `focus` | `herdr agent focus kb-<child-id>` |
+| `notify` | `herdr notification show "<title>" --sound request` |
+| `read-output` | not used by this driver — herdr reports real lifecycle state instead |
+
+### kitty
+
+`resolve-kind` — precedence:
+
+1. `$KB_AGENT_KIND` if set (propagated by an outer coordinator's `spawn`).
+2. `kitten @ ls --self | jq -r '..|.foreground_processes?|arrays|.[].cmdline[0]'`
+   → basename matched against the known kind list.
+3. Ask the user.
+
+`spawn` — one call replaces herdr's split+start+prompt. `launch` prints the
+new window id on stdout:
 
 ```bash
-herdr agent get "$HERDR_PANE_ID"
+win=$(kitten @ launch --type=window --location=hsplit --dont-take-focus \
+  --cwd <worktree-path> --title kb-<child-id> \
+  --var kb_task=<child-id> \
+  --env KB_AGENT_KIND=<kind> \
+  <kind-executable> "<filled prompt>")
 ```
 
-Use the returned kind for every child's `herdr agent start --kind <kind>`.
-Ask the user only if this is unresolvable.
+Notes:
+
+- Prompt goes as argv, not `send-text` — every supported kind takes a
+  positional prompt, so there is no "wait for the prompt box" step.
+- `--title kb-<child-id>` is the addressing key: `-m title:kb-<child-id>`.
+  Uniqueness is guaranteed by the `kb-<task-id>` naming rule.
+- `--var kb_task=<child-id>` is a second, agent-proof handle
+  (`-m var:kb_task=<child-id>`); a child can retitle its own window, it
+  cannot clear a user var.
+- `--dont-take-focus` keeps the human's cursor where it was during fan-out.
+- Record the printed window id in the child's task body next to `Branch:`,
+  so a resumed coordinator can re-address panes.
+
+`focus` — `kitten @ focus-window -m title:kb-<child-id>`
+
+`notify` — `kitten notify --sound-name system --identifier kb-<child-id> \
+  "kb-<child-id> blocked"`. Uses the escape-code channel, so it works even
+  with remote control off. `--identifier` makes repeat notifications replace
+  rather than stack.
+
+`read-output` — `kitten @ get-text -m title:kb-<child-id> --extent=screen`
+
+Resolve `resolve-kind` once, for whichever `<driver>` was passed in, and use
+the returned kind for every child's `spawn`. Ask the user only if this is
+unresolvable.
 
 ## Main loop
 
@@ -107,8 +167,8 @@ kanban-md list --parent <parent-id> --status backlog --json | jq -r '.[].id' \
 
 ### Step 3: Fan out, up to 3 live children
 
-Count current live panes (children you started that haven't exited/handed
-off yet). While fewer than 3 live and a pick succeeds:
+Count current live children (children you started that haven't
+exited/handed off yet). While fewer than 3 live and a pick succeeds:
 
 ```bash
 kanban-md pick --claim <agent> --parent <parent-id> --status todo --move in-progress
@@ -131,20 +191,10 @@ For each newly picked child `<child-id>`:
    ```
    Record `Branch: <branch-name>` in the child's body (or
    `Integration branch: <branch-name>` if the child itself has children).
-2. Start it in a pane. `herdr pane split` always emits JSON; capture the new
-   pane's id (`.result.pane.pane_id`, e.g. `wD:p2` — server-assigned, not
-   derivable from `<child-id>`, so it must be read from this output, never
-   guessed):
-   ```bash
-   new_pane_id=$(herdr pane split --direction down --cwd <worktree-path> | jq -r '.result.pane.pane_id')
-   herdr agent start kb-<child-id> --kind <agent-kind> --pane "$new_pane_id"
-   ```
-3. Submit the verbatim prompt template (see below), substituting the six
-   parameters — or five if the board is under the standard, out-of-repo
-   layout (no `<board-dir>`):
-   ```bash
-   herdr agent prompt kb-<child-id> "<filled prompt>"
-   ```
+2. `spawn` it with `<driver>`, worktree path, `kb-<child-id>`, the resolved
+   kind, and the filled prompt template below (see "Pane driver" for the
+   exact call per driver). Record the returned handle (pane id or window id)
+   in the child's body next to `Branch:`.
 
 If `pick` returns nothing and fewer than 3 are live, there is nothing more
 to fan out this pass — fall through to Step 4.
@@ -160,22 +210,50 @@ Task ID: <child-id>
 Parent branch: <integration-branch>
 Worktree branch: <branch-name>
 Worktree path: <worktree-path>
+Driver: <driver>
 [Board directory: <board-dir>]
 ```
 
-### Step 4: Wait on live children
+### Step 4: Wait on live children — poll the board, not the panes
+
+No driver exposes lifecycle state that both drivers can rely on (kitty has
+none at all), so settle detection polls the board directly:
 
 ```bash
-herdr agent wait kb-<child-id> --until idle --until blocked --until done
+kanban-md list --parent <parent-id> --json
 ```
 
-Poll each live child. On each settle:
+Every state the coordinator acts on is already written to the board by the
+child itself:
 
-- **`blocked`** — every `blocked` is user-needed, never auto-answered. Fire
-  a notification and focus that pane:
-  ```bash
-  herdr notification show "kb-<child-id> blocked" --sound request
-  herdr agent focus kb-<child-id>
+- `handoff` → `review` = ready for the merge gate
+- `handoff --block` → `blocked` = needs the human
+- still `in-progress` = keep waiting
+
+Poll every 30s. Combine with Step 1's claim refresh, which already runs once
+per pass.
+
+On `herdr`, compose this with a bounded fast path so the coordinator can
+settle sooner than the next tick, without blocking past it:
+
+```bash
+herdr agent wait kb-<child-id> --until idle --until blocked --until done --timeout 30000 || true
+```
+
+The `--timeout` is required — unbounded waits would block the coordinator
+past its poll tick and stall the parent-claim refresh. The `|| true` is
+required because a timeout exits nonzero, which here is the ordinary case,
+not an error. Its return is a hint to re-read the board, never a verdict:
+`--until idle` also fires on the ordinary "idle, no handoff yet" case, so the
+board above is always what decides whether a child settled.
+
+On each settle (from the board, on either driver):
+
+- **`blocked`** — every `blocked` is user-needed, never auto-answered.
+  `notify` and `focus` that child:
+  ```
+  notify("kb-<child-id> blocked")
+  focus(kb-<child-id>)
   ```
   This child stops consuming a fan-out slot but is **not** merged; other
   live children keep working. `pick` already withholds anything depending
@@ -183,9 +261,36 @@ Poll each live child. On each settle:
 - **Handed off to `review`** (child released its claim, moved itself) — go
   to Step 5 (merge gate) for this child. It frees a fan-out slot only after
   the merge decision below.
-- **`idle` with no handoff** — the child is between turns on something else
-  (e.g. a `needs-user` tag task waiting on the human before its own
-  handoff); leave it live and re-wait.
+- **Still `in-progress`** — leave it live and re-poll.
+
+#### kitty-only: staleness heuristic
+
+kitty cannot detect a child stalled at a permission prompt — it never writes
+to the board and looks alive forever (herdr detects this directly as
+`blocked`, so this heuristic does not apply there). A child is *suspect*
+when, across two successive polls, all three hold:
+
+- its board status has not changed, and
+- its last progress note is older than 10 minutes, and
+- `read-output` is byte-identical to the previous poll.
+
+The progress-note clause keeps a long `go test` from tripping this: the leaf
+already writes timestamped notes around major steps and test runs
+(`kanban-leaf-task.md`, "Progress notes"), so recent activity exempts a child
+that is simply busy.
+
+On suspect, do exactly two things: `notify` and `focus`. Do **not** free the
+fan-out slot and do **not** touch the child's board state — staleness is a
+guess, not evidence the child is finished; freeing the slot on a guess would
+spawn a 4th child alongside a still-live sibling and break the single-writer
+property the 3-slot cap protects. The human looks at the focused pane and
+decides. Notify once per suspect child, not once per poll — `notify`'s
+`--identifier` replaces rather than stacks, but re-focusing every 30s would
+fight the user's cursor, so latch it (skip `focus` on repeat suspect polls
+for the same child).
+
+The leaf's `allowed-tools` allowlist makes permission stalls uncommon; this
+is a backstop, not the main path.
 
 ### Step 5: Merge gate (per handed-off child)
 
@@ -223,9 +328,9 @@ and ask the user. Do not touch other children's merges while this is open.
 
 ### Step 6: Needs-user children
 
-A child tagged `needs-user` runs in a pane like any other. When it settles
-`blocked` (waiting on the explicit human action the tag calls out), treat it
-exactly like Step 4's `blocked` case — notify, focus, leave it live.
+A child tagged `needs-user` runs like any other. When it settles `blocked`
+(waiting on the explicit human action the tag calls out), treat it exactly
+like Step 4's `blocked` case — notify, focus, leave it live.
 
 ## Finished detection
 

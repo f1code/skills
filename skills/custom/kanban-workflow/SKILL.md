@@ -2,13 +2,14 @@
 name: kanban-workflow
 description: >
   Default workflow for executing a kanban-md task tree: recurse into children,
-  fan out parallel leaves into herdr panes, gate every merge on the user.
+  fan out parallel leaves into parallel panes, gate every merge on the user.
 allowed-tools:
   - Bash(kanban-md *)
   - Bash(kbmd *)
   - Bash(git *)
   - Bash(wt *)
   - Bash(herdr *)
+  - Bash(kitten *)
   - Bash(go *)
   - Bash(golangci-lint *)
   - Bash(awk *)
@@ -47,6 +48,20 @@ If this succeeds (the board is tracked/inside the repo), every worktree would
 get its own diverging copy. In that case resolve the board's absolute path
 now and pass `--dir <board-dir>` on every `kanban-md` call for the rest of
 this session, and to every child as a sixth parameter.
+
+**Driver guard, once at setup:**
+
+```bash
+if [ -n "$HERDR_PANE_ID" ]; then driver=herdr
+elif [ -n "$KITTY_LISTEN_ON" ]; then
+  kitten @ ls --self >/dev/null 2>&1 || { echo "STOP: KITTY_LISTEN_ON is set but kitten @ ls --self failed — fix kitty remote control (see README.md) rather than falling through"; exit 1; }
+  driver=kitty
+else
+  echo "STOP: neither herdr (\$HERDR_PANE_ID) nor kitty remote control (\$KITTY_LISTEN_ON) is available"; exit 1
+fi
+```
+
+Pass `<driver>` to every recursive child, next to `<agent>`.
 
 ## Agent Identity
 

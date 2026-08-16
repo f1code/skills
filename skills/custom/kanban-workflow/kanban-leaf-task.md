@@ -87,8 +87,8 @@ kanban-md handoff <task-id> --claim <agent> --release \
 This moves the task to `review` and releases your claim — that release is
 what tells the coordinator's `pick --status todo` this task is no longer
 in flight. Stop here. The coordinator picks up the merge decision with the
-user and either merges (task ends `done`) or sends you feedback by re-prompting
-this same pane, or moves the task back to `todo` for a fresh pick if the pane
+user and either merges (task ends `done`) or sends you feedback by
+re-prompting you, or moves the task back to `todo` for a fresh pick if you
 already exited.
 
 # References
