@@ -25,11 +25,8 @@ structural kanban parent field).
 The Worktree Branch must be provided to you as `<worktree-branch>`.
 The Worktree Path must be provided to you as `<worktree-path>`.
 The Task ID must be provided to you as `<task-id>`.
-The Board Directory may be provided to you as `<board-dir>` — only when the
-coordinator's board-location guard fired. If given, pass `--dir <board-dir>`
-on every `kanban-md` call below.
 
-**STOP** if any of the first five parameters is not explicitly provided.
+**STOP** if any of these parameters is not explicitly provided.
 
 You do not call `wt` at all. The coordinator already created
 `<worktree-path>` on `<worktree-branch>` and owns every merge; you only write
@@ -69,8 +66,7 @@ of proceeding to Step 2.
 ## Step 2: Hand off for merge
 
 Use the project's "Definition of Done" to confirm the task is ready. Hand off
-— do **not** merge yourself; the coordinator merges every child from board
-home, one at a time, so the integration branch has a single writer:
+for the coordinator to merge — merging is never yours to do:
 
 ```bash
 kanban-md handoff <task-id> --claim <agent> --release \

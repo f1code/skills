@@ -27,8 +27,7 @@ invocation; that is the outer coordinator's job if this parent is itself a
 child (see "Recursing into a sub-epic" below).
 
 `<parent-id>`, `<agent>`, and `<driver>` (`herdr` or `kitty`) must be
-provided. `<board-dir>` (only if the board guard in `SKILL.md` fired) is a
-fourth. **STOP** if `<parent-id>`, `<agent>`, or `<driver>` is missing.
+provided. **STOP** if any is missing.
 
 ## Setup
 
@@ -49,27 +48,15 @@ Read the parent body for `Integration branch: <name>`.
 - **Found** — use it as `<integration-branch>`.
 - **Not found** — determine `<parent-branch>` (the branch to cut from): the
   *grandparent's* `Integration branch:` line if `<parent-id>` has a parent,
-  else the current board-home branch. Create:
+  else the current board-home branch. Name the new branch per
+  **`branch-naming.md`** (in this skill's directory — the naming rules used
+  here and by leaves), then create it:
   ```bash
   wt switch --create epic/<parent-id>-<slug> --base <parent-branch> --no-cd --format json
   ```
   Record `Integration branch: epic/<parent-id>-<slug>` in the parent body.
   Return board-home to `<parent-branch>` (the coordinator does not work in
   this worktree — children's worktrees branch off its HEAD).
-
-### Branch and worktree naming (used here and by leaves)
-
-Precedence, applied once per task:
-
-1. Project convention documented in `AGENTS.md` / `CONTRIBUTING.md`.
-2. External ticket id: a `Ticket: <id>` body line, else `[A-Z]{2,}-\d+`
-   matched against the body — never sniffed from arbitrary text (`ADR-0002`,
-   `RFC-7231` would produce garbage).
-3. Default: `epic/<id>-<slug>` for a task with children, `task/<id>-<slug>`
-   for a leaf.
-
-`<slug>`: first 3–4 meaningful words of the title, lowercased, spaces/punct
-→ hyphens, max 30 chars.
 
 ## Pane driver
 
@@ -133,9 +120,9 @@ this same loop that fans 3-wide on independent children.
 
 For each newly picked child `<child-id>`:
 
-1. Determine its `<branch-name>` (task/epic-<id>-<slug> per the naming
-   rules above) and create its worktree **off the integration branch HEAD**,
-   so it inherits every sibling merged so far:
+1. Determine its `<branch-name>` (task/epic-<id>-<slug> per
+   `branch-naming.md`) and create its worktree **off the integration branch
+   HEAD**, so it inherits every sibling merged so far:
    ```bash
    wt switch --create <branch-name> --base <integration-branch> --no-cd --format json
    ```
@@ -161,7 +148,6 @@ Parent branch: <integration-branch>
 Worktree branch: <branch-name>
 Worktree path: <worktree-path>
 Driver: <driver>
-[Board directory: <board-dir>]
 ```
 
 ### Step 4: Wait on live children — poll the board, not the panes
@@ -205,36 +191,18 @@ On each settle (from the board, on either driver):
 
 ### Step 5: Merge gate (per handed-off child)
 
-```bash
-kanban-md show <child-id>
-```
-
-Present the user the child's verdict block (appended to its body) plus:
-
-```bash
-git -C <worktree-path> diff --stat $(git -C <worktree-path> merge-base HEAD <integration-branch>)..HEAD
-```
-
-Wait for explicit go-ahead. Other live children keep working while the user
+Follow **`merge-gate.md`** (in this skill's directory) with `<target-branch>`
+= `<integration-branch>`. Other live children keep working while the user
 decides — this is not a blocking gate on the whole coordinator, only on this
 child's merge.
 
-- **Approved** — merge from board home, one at a time (single writer on the
-  integration branch: every merge validates against the true tip, so no
-  non-fast-forward refusals, pre-merge hook contention, or under-tested
-  tips):
-  ```bash
-  wt merge -C <worktree-path> -y <integration-branch>
-  kanban-md edit <child-id> --status done
-  ```
-  This frees the fan-out slot; go back to Step 3.
-- **Rejected / changes requested** — relay feedback to the child by
+- **Approved** — merge-gate's merge and `--status done` free the fan-out
+  slot; go back to Step 3.
+- **Not approved** — the feedback comes back to you: relay it to the child by
   re-prompting the pane. If the pane already exited, move the child back to
   `todo` (`kanban-md move <child-id> todo`) so the next pass's `pick` sees it.
-
-If `wt merge` fails (rebase conflict): stop merging entirely, leave the
-conflict open in `<worktree-path>`, keep the parent claim, report the path,
-and ask the user. Do not touch other children's merges while this is open.
+- **`wt merge` fails** — per `merge-gate.md`, additionally keep the parent
+  claim. Do not touch other children's merges while this is open.
 
 ### Step 6: Needs-user children
 
@@ -273,5 +241,5 @@ none merges itself.
 | All children merged | Test the integration branch, `kanban-md handoff <parent-id> --claim <agent> --release --note "<summary of merged children>"` to move it to `review`, report the branch, exit |
 | A child is `blocked` | Already notified + focused; report it as outstanding, do not treat the parent as done |
 | A child's review loop exhausts 3 cycles | Child hands off blocked with its last verdict block; handled identically to a `blocked` child |
-| `wt merge` fails | Left open per Step 5; report the path, keep the parent claim, ask the user |
+| `wt merge` fails | Left open per `merge-gate.md`; report the path, keep the parent claim, ask the user |
 | Coordinator dies | Parent claim expires in 1h and is reclaimable; `Integration branch:` and each child's `Branch:` line make the run resumable — re-invoke this file with the same `<parent-id>` |

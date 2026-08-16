@@ -33,21 +33,11 @@ touch tasks you hold the claim on.
 
 ## Board Directory
 
-Under the standard project layout the board sits at the project root
-(a sibling of `main/` and `worktrees/`), untracked by git. `kanban-md` finds it
-by walking upward from the current directory, so no `--dir` flag is normally
-needed.
-
-**Guard, once at setup:**
-
-```bash
-git -C . ls-files --error-unmatch kanban >/dev/null 2>&1
-```
-
-If this succeeds (the board is tracked/inside the repo), every worktree would
-get its own diverging copy. In that case resolve the board's absolute path
-now and pass `--dir <board-dir>` on every `kanban-md` call for the rest of
-this session, and to every child as a sixth parameter.
+The board sits at the project root (a sibling of `main/` and `worktrees/`),
+untracked by git. `kanban-md` finds it by walking upward from the current
+directory, so every worktree shares the one board and no `--dir` flag is ever
+needed. A board tracked inside the repo would give each worktree its own
+diverging copy — move it to the project root before running this skill.
 
 **Driver guard, once at setup:**
 
@@ -118,8 +108,8 @@ kanban-md list --parent <task-id> --json | jq 'length'
 ### Children exist → this task is a parent
 
 Follow **`kanban-parent-task.md`** (in this skill's directory) with
-`<task-id>` as the parent. That file owns branch creation, fan-out, review
-gating, and merges for the whole subtree.
+`<task-id>` as the parent. It drives the whole subtree: branch creation,
+fan-out, review gating, and merges.
 
 ### No children → this task is a leaf, and it is the invocation itself
 
@@ -132,26 +122,25 @@ recursion never do; this is the one exception, since here the coordinator
 1. Determine `<parent-branch>`: if `<task-id>` has a parent, read
    `Integration branch: <name>` from the parent's body; otherwise it's the
    current board-home branch.
-2. Create or reuse the worktree (see "Branch and worktree naming" in
-   `kanban-parent-task.md` for slug/naming rules):
+2. Create or reuse the worktree (see `branch-naming.md` for slug/naming
+   rules):
    ```bash
    wt switch --create task/<task-id>-<slug> --base <parent-branch> --no-cd --format json
    ```
-   Record `Branch: task/<task-id>-<slug>` in the task body.
-3. Implement, self-review, and hand off exactly as described in
-   `kanban-leaf-task.md`, Steps 1–2 (skip its worktree-creation
-   precondition — you just did that yourself). Do this inline, not in a pane.
-4. On `APPROVE` (or after the fix loop settles), present the verdict block and
-   `git diff --stat` against the merge-base to the user and wait for
-   go-ahead.
-5. On go-ahead, merge:
-   ```bash
-   wt merge -C <worktree-path> -y <parent-branch>
-   ```
-6. Mark done:
-   ```bash
-   kanban-md edit <task-id> --release --status done
-   ```
+   Record `Branch: task/<task-id>-<slug>` in the task body. This is
+   `<worktree-branch>`; the created path is `<worktree-path>`.
+3. Bind `<agent>`, `<parent-branch>`, `<worktree-branch>`, `<worktree-path>`
+   and `<task-id>`, and follow **`kanban-leaf-task.md`**
+   unmodified — including its Step 2 handoff to `review`. Its precondition
+   ("the coordinator already created `<worktree-path>`… you only write code
+   and hand off") is satisfied by step 2 above.
+4. Follow **`merge-gate.md`** with `<target-branch>` = `<parent-branch>`,
+   which also marks the task `done` on approval.
+
+Handing off to yourself is not ceremony: it creates the same resumability
+waypoint the fan-out path has. A crash mid-run leaves the task in `review`
+with its verdict block in the body — exactly the state Step 4 below reports,
+and a re-invocation can resume from it.
 
 ## Step 4: Report and exit
 
