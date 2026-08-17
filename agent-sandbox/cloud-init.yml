@@ -1,0 +1,55 @@
+# VM configuration for an agent sandbox
+#
+# Use with orb:
+#   orb create arch my-sandbox -c cloud-init.yaml
+#
+# 1. Install Tailscale, Mosh, SSH, and your dev tools
+packages:
+  # net
+  - tailscale
+  - mosh
+  - openssh
+  # utils
+  - neovim
+  - kitty-terminfo
+  # devel
+  - fnm
+  - git
+  - go
+  - python
+  - python-uv
+  - fzf
+
+runcmd:
+  # 1. Generate the en_US.UTF-8 locale to prevent terminal warnings
+  - sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+  - locale-gen
+  - echo "LANG=en_US.UTF-8" > /etc/locale.conf
+  # Enable and start the OpenSSH and Tailscale servers
+  - systemctl enable --now sshd
+  - systemctl enable --now tailscaled
+  
+  # Grab the username OrbStack created
+  - MAC_USER=$(ls /home | head -n 1)
+
+  # Install herdr + omp AS the standard user so it goes to their ~/.local/bin
+  - su - $MAC_USER -c 'curl -fsSL https://herdr.dev/install.sh | sh'
+  - su - $MAC_USER -c 'curl https://omp.sh/install | sh'
+  # Add ~/.local/bin to the user's Bash PATH for herdr and local tools
+  - echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/$MAC_USER/.bashrc
+  - echo 'eval "$(fnm env --use-on-cd --shell bash)"' >> /home/$MAC_USER/.bashrc
+
+  # Clone configuration
+  - su - $MAC_USER -c 'git clone git@github.com:f1code/skills.git ~/.agents'
+
+  # Inject your iPhone's public key (for Moshi)
+  # - mkdir -p /home/$MAC_USER/.ssh
+  # - echo "ssh-ed25519 AAAAC3NzaC... YOUR_MOSHI_PUBLIC_KEY" >> /home/$MAC_USER/.ssh/authorized_keys
+  # - chown -R $MAC_USER:$MAC_USER /home/$MAC_USER/.ssh
+  # - chmod 700 /home/$MAC_USER/.ssh
+  # - chmod 600 /home/$MAC_USER/.ssh/authorized_keys
+
+  # MANUAL STEP TO PERFORM AFTER SETUP:
+  # Join your Tailnet
+  # - tailscale up --authkey=tskey-auth-YOUR_KEY_HERE
+

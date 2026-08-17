@@ -1,0 +1,8 @@
+providers:
+  # LiteLLM here fronts Bedrock Anthropic models. Prompt caching needs
+  # `cache_control: {type: ephemeral}` content markers (LiteLLM maps these to
+  # Bedrock `cachePoint`), not OpenAI's `prompt_cache_key`. Auto-detection only
+  # enables this for OpenRouter `anthropic/*` ids, so set it explicitly.
+  litellm:
+    compat:
+      cacheControlFormat: anthropic

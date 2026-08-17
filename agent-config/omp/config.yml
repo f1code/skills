@@ -1,0 +1,25 @@
+setupVersion: 1
+modelRoles: 
+  default: litellm/claude-sonnet-5:low
+  vision: litellm/claude-fable-5:xhigh
+  designer: litellm/claude-opus-5:high
+  plan: litellm/claude-opus-5:high
+  task: litellm/claude-sonnet-5:low
+  tiny: litellm/claude-haiku-4-5:minimal
+  commit: litellm/claude-haiku-4-5:off
+  advisor: litellm/claude-opus-5:high
+  smol: litellm/claude-haiku-4-5
+  slow: litellm/claude-opus-5:medium
+defaultThinkingLevel: auto
+disabledProviders: 
+  - claude
+  - cursor
+  - opencode
+  - claude-plugins
+disabledExtensions: 
+  []
+skills: 
+  customDirectories: 
+    - ~/.agents/skills/custom
+dev: 
+  autoqaConsent: denied
