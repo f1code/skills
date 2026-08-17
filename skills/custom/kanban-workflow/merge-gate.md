@@ -24,4 +24,6 @@ Wait for explicit go-ahead.
 - **Not approved** — do not merge. Return to the caller with the user's
   feedback; routing it back into the work is the caller's decision.
 - **`wt merge` fails** (rebase conflict): stop merging, leave the conflict
-  open in `<worktree-path>`, report the path, and ask the user.
+  open in `<worktree-path>`, report the path, and ask the user. Never import
+  commits to paper over it — a conflict here usually means a branch was cut
+  from the wrong tip, and that is the user's call.

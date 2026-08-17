@@ -58,6 +58,13 @@ Read the parent body for `Integration branch: <name>`.
   Return board-home to `<parent-branch>` (the coordinator does not work in
   this worktree — children's worktrees branch off its HEAD).
 
+### 3. Base refs are fixed once chosen
+
+`wt merge` at the merge gate is the only history-moving command you run. Never
+`fetch`/`pull`/`rebase`/`merge` a branch to "catch it up", least of all a
+child's. If a branch was cut from the wrong tip, **STOP and ask the user** —
+moving it rewrites diffs under children still working on it.
+
 ## Pane driver
 
 All child-spawning and settle-detection goes through five driver operations.

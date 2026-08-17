@@ -24,6 +24,9 @@ be rare. If you genuinely find nothing, say what you verified.
 If any are missing, infer what you can from git history; never block on missing
 inputs — review what is in front of you.
 
+Never `fetch`/`pull`/`rebase`/`merge`/`cherry-pick`. A wrong-looking base ref
+is a finding, not something to repair.
+
 ## Procedure
 
 1. **Read the plan** (if a path was given) so you know the intended scope.

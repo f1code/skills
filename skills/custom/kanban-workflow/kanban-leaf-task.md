@@ -32,6 +32,11 @@ You do not call `wt` at all. The coordinator already created
 `<worktree-path>` on `<worktree-branch>` and owns every merge; you only write
 code and hand off.
 
+**Never repair the base.** The coordinator chose it. If history looks stale or
+cut from the wrong tip, never `fetch`/`pull`/`rebase`/`merge`/`cherry-pick` to
+fix it — that inflates your diff and wrecks the final merge. Work with what is
+in the worktree; if you can't, hand off blocked saying which ref you expected.
+
 # Main Workflow
 
 ## Step 1: Implement
