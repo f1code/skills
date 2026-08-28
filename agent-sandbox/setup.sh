@@ -14,6 +14,7 @@ fi
 
 # 1. Install packages
 pacman -Sy --needed --noconfirm \
+  base-devel \
   tailscale \
   mosh \
   openssh \
@@ -24,14 +25,22 @@ pacman -Sy --needed --noconfirm \
   go \
   python \
   python-uv \
-  fzf
+  fzf \
+  worktrunk
 
 # 2. Generate the en_US.UTF-8 locale to prevent terminal warnings
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
-# 3. Enable and start the OpenSSH and Tailscale servers
+# 3. Networking
+
+#  - Enable systemd-resolved - needed for tailscale DNS
+sudo systemctl unmask systemd-resolved
+sudo systemctl enable --now systemd-resolved
+sudo systemctl restart tailscaled
+
+#  - Enable and start the OpenSSH and Tailscale servers
 systemctl enable --now sshd
 systemctl enable --now tailscaled
 
@@ -48,7 +57,7 @@ su - "$MAC_USER" -c 'curl -fsSL https://herdr.dev/install.sh | sh'
 su - "$MAC_USER" -c 'curl -fsSL https://omp.sh/install | sh'
 
 # 6. Add ~/.local/bin to the user's Bash PATH for herdr and local tools
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> "/home/$MAC_USER/.bashrc"
+echo 'export PATH="$HOME/.local/bin:$HOME/go/bin:$PATH"' >> "/home/$MAC_USER/.bashrc"
 echo 'eval "$(fnm env --use-on-cd --shell bash)"' >> "/home/$MAC_USER/.bashrc"
 
 # 7. Pre-approve github ssh key
@@ -62,7 +71,13 @@ chmod 600 "/home/$MAC_USER/.ssh/authorized_keys"
 
 # 8. Clone configuration
 su - "$MAC_USER" -c 'git clone git@github.com:f1code/skills.git ~/.agents'
-su - "$MAC_USER" -c 'mkdir ~/.omp && ln -s ~/.agents/agent-config/omp ~/.omp/agent'
+su - "$MAC_USER" -c 'mkdir -p ~/.omp && ln -s ~/.agents/agent-config/omp ~/.omp/agent'
+su - "$MAC_USER" -c 'mkdir -p ~/.config && git clone git@github.com:f1code/dotfiles.git ~/.config/dotfiles'
+su - "$MAC_USER" -c 'mkdir -p ~/.config/worktrunk && ln -sf ~/.config/dotfiles/worktrunk/config.toml ~/.config/worktrunk'
 
-echo "Done. Manual step remaining: join your Tailnet with"
+echo "Done. "
+echo "Manual steps remaining: "
+echo " - join your Tailnet with"
 echo "  tailscale up --authkey=tskey-auth-YOUR_KEY_HERE"
+echo " - initialize private variables into ~/.bashrc"
+echo " - configure git with identity"

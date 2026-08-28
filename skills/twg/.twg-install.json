@@ -1,0 +1,11 @@
+{
+  "skillName": "twg",
+  "target": "global",
+  "installPath": "/Users/ngaller@4gclinical.com/.agents/skills/twg",
+  "binaryPath": "/Users/ngaller@4gclinical.com/.local/bin/twg",
+  "installedAt": "2026-08-11T14:54:37.876Z",
+  "installedVersion": "1.1.1",
+  "buildProfile": "external",
+  "buildCommit": "81e4dcc86958",
+  "builtAt": "2026-07-24T10:17:20.604Z"
+}
