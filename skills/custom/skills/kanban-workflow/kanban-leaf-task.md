@@ -90,10 +90,14 @@ already exited.
 
 ## Self-review
 
-Before handing off, run an independent self-review. Spawn a fresh-context
-sub-agent with cwd set to `<worktree-path>`, and have it read
-`reviewing-changes.md` (bundled beside this file, in the same skill
-directory) for the full checklist and output contract. Inputs to give it:
+Before handing off, run an independent self-review. Spawn the
+`kanban-reviewer` agent (defined in `~/.claude/agents/`; it pins a strong
+model so review quality doesn't inherit a cheaper implementing model) with
+cwd set to `<worktree-path>`. If that agent type is unavailable, fall back to
+a fresh-context general-purpose sub-agent on the strongest available model.
+Either way, have it read `reviewing-changes.md` (bundled beside this file, in
+the same skill directory) for the full checklist and output contract. Inputs
+to give it:
 
 - Task ID: `<task-id>`
 - Plan: whatever is linked from the task body, or "trivial — no plan"
