@@ -127,7 +127,16 @@ this same loop that fans 3-wide on independent children.
 
 For each newly picked child `<child-id>`:
 
-1. Determine its `<branch-name>` (task/epic-<id>-<slug> per
+1. Transfer the claim from yourself to the child's own identity —
+   `--claim` only ever accepts the *current* claimant, so this is a
+   release-then-reclaim, not a single call:
+   ```bash
+   kanban-md edit <child-id> --release
+   kanban-md edit <child-id> --claim kb-<child-id>
+   ```
+   Do this immediately, before creating the worktree, so no other pick can
+   grab the task in between.
+2. Determine its `<branch-name>` (task/epic-<id>-<slug> per
    `branch-naming.md`) and create its worktree **off the integration branch
    HEAD**, so it inherits every sibling merged so far:
    ```bash
@@ -135,7 +144,7 @@ For each newly picked child `<child-id>`:
    ```
    Record `Branch: <branch-name>` in the child's body (or
    `Integration branch: <branch-name>` if the child itself has children).
-2. `spawn` it with worktree path, `kb-<child-id>`, the resolved kind, and the
+3. `spawn` it with worktree path, `kb-<child-id>`, the resolved kind, and the
    filled prompt template below — exact call in your `<driver>` file. Record
    the returned handle (pane id or window id) in the child's body next to
    `Branch:`.

@@ -52,6 +52,9 @@ type:
 Append progress notes to the task body using the "Progress notes" section in
 References.
 
+End every commit subject with `(task <task-id>)`, never `#<task-id>` — GitHub
+reads `#N` as a PR/issue link and squash-merge appends `(#PR)` in the same form.
+
 Your fixed point for code review is `git merge-base HEAD <parent-branch>` —
 not `<parent-branch>` HEAD itself, which moves as siblings merge and would
 show this task's diff *minus* a sibling's already-landed work.
@@ -75,7 +78,10 @@ for the coordinator to merge — merging is never yours to do:
 
 ```bash
 kanban-md handoff <task-id> --claim <agent> --release \
-  --note "Ready for merge. Verdict: <APPROVE|CHANGES_REQUESTED after N cycles>." \
+  --note "Ready for merge. Verdict: <APPROVE|CHANGES_REQUESTED after N cycles>.
+
+## Judgment calls
+- <the call, where it lives, and the cheapest way to reverse it>" \
   --timestamp
 ```
 
@@ -85,6 +91,19 @@ in flight. Stop here. The coordinator picks up the merge decision with the
 user and either merges (task ends `done`) or sends you feedback by
 re-prompting you, or moves the task back to `todo` for a fresh pick if you
 already exited.
+
+### Judgment calls
+
+End every handoff note with the edits a reviewer would most likely reverse,
+hardest to defend first. A judgment call is anything you chose rather than
+derived: scope you widened, a claim you took from the plan without checking it
+against the code, a test you altered instead of added, a file you touched that
+the task did not name. Give each one its location and the cheapest way to undo
+it.
+
+List them even when the review returned `APPROVE`. A reviewer shares your
+reasoning and blesses calls the user never made, so those are the ones worth
+surfacing. Name at least the single call you would defend least.
 
 # References
 
