@@ -2,7 +2,7 @@
 
 ## Writing rules: docs, PR text, messages.
 
-- Never touch code or technical terms; swap in everyday words only where precision survives.
+- Don't rewrite code or technical terms; swap in everyday words only where precision survives.
 - Be extremely concise.  Sacrifice grammar for the sake of brevity.
 - Never use a metaphor, simile or other figure of speech which you are used to seeing in print.
 - If it is possible to cut a word out, always cut it out.
@@ -11,6 +11,12 @@
 - Break any of these rules sooner than say anything outright barbarous.
 
 Review every prose output against these rules before delivering.
+Apply those rules also to code comments and docstring.
+
+## Code comments, docstrings
+
+- No docstring when name and signature say it. Default: none.
+- No comment that restates the code. Comment only the why.
 
 ## Shell Commands
 
@@ -37,3 +43,4 @@ Review every prose output against these rules before delivering.
 │
 ├── plans/                   (project plans & docs - no git)
 └── research/                (research & exploration - no git)
+
