@@ -4,6 +4,7 @@ description: >
   Use with the root `twg` skill for on-call handoffs, incident response and
   investigation, post-incident reviews, reliability reviews, Assets refresh,
   capacity views, meeting summaries, and operational risk readouts.
+disable-model-invocation: true
 ---
 
 # twg-operational-health

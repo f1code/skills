@@ -4,6 +4,7 @@ description: >
   Use with root `twg` to route owners, subject-matter experts, maintainers,
   reviewers, approvers, decision authorities, Heads of Engineering, or
   escalation paths for a topic, area, ask, project, service, or component.
+disable-model-invocation: true
 ---
 
 # twg-responsibility-routing
@@ -34,7 +35,7 @@ Keep these roles distinct:
 ## Resolve Scope Before People
 
 For a fuzzy topic or area, compare one bounded
-`twg search "<topic>" --app confluence` pass with one bounded
+`twg rovo search "<topic>" --app confluence` pass with one bounded
 `twg work search "<topic>"` pass. Group same-named results into distinct
 initiative, platform, domain, feature, and team clusters. Hydrate 2-5 central
 charters, roadmaps, services, projects, or active workstreams before ranking

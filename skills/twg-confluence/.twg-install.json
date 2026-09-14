@@ -1,7 +1,7 @@
 {
   "skillName": "twg",
   "target": "Claude Code",
-  "installPath": "/Users/ngaller@4gclinical.com/.claude/skills/twg-jira-resolve-merged-work",
+  "installPath": "/Users/ngaller@4gclinical.com/.claude/skills/twg-confluence",
   "binaryPath": "/Users/ngaller@4gclinical.com/.local/bin/twg",
   "installedAt": "2026-09-11T09:05:00.323Z",
   "installedVersion": "1.2.8",
