@@ -44,3 +44,8 @@ Apply those rules also to code comments and docstring.
 ├── plans/                   (project plans & docs - no git)
 └── research/                (research & exploration - no git)
 
+
+## CodeArtifact credentials
+
+- Never print `~/.config/uv/uv.toml`, `~/.npmrc`, `pip.conf` or `~/.config/4g/.codeartifact`: they embed live tokens. To inspect index config, `rg` for names and mask URLs (`sed 's#//[^@]*@#//***@#'`).
+- 401 from CodeArtifact (uv, pip, npm): ask the user to run `! ~/tools/init-codeartifact.sh`. Do not work around it with env overrides or hand-edited config.
