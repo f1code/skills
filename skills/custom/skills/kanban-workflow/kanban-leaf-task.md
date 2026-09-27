@@ -12,69 +12,64 @@ allowed-tools:
   - Bash(date *)
 disable-model-invocation: true
 ---
-
 # Pre-requisites
 
 ## Provided Parameters
 
-The Agent Identity must be provided to you as `<agent>`. Use this in all
-kanban-md commands: `--claim <agent>`.
-The Parent Branch must be provided to you as `<parent-branch>` (this is the
-integration branch you diff and eventually merge against — not the
-structural kanban parent field).
-The Worktree Branch must be provided to you as `<worktree-branch>`.
-The Worktree Path must be provided to you as `<worktree-path>`.
-The Task ID must be provided to you as `<task-id>`.
+Agent Identity give to you as `<agent>`. Use in all kanban-md command:
+`--claim <agent>`.
+Parent Branch give to you as `<parent-branch>` (this branch you diff and
+merge against — not kanban parent field).
+Worktree Branch give to you as `<worktree-branch>`.
+Worktree Path give to you as `<worktree-path>`.
+Task ID give to you as `<task-id>`.
 
-**STOP** if any of these parameters is not explicitly provided.
+**STOP** if any param not give.
 
-You do not call `wt` at all. The coordinator already created
-`<worktree-path>` on `<worktree-branch>` and owns every merge; you only write
-code and hand off.
+You no call `wt`. Coordinator already make `<worktree-path>` on
+`<worktree-branch>` and own every merge; you only write code and hand off.
 
-**Never repair the base.** The coordinator chose it. If history looks stale or
-cut from the wrong tip, never `fetch`/`pull`/`rebase`/`merge`/`cherry-pick` to
-fix it — that inflates your diff and wrecks the final merge. Work with what is
-in the worktree; if you can't, hand off blocked saying which ref you expected.
+**Never fix base.** Coordinator pick it. If history look old or cut from wrong
+tip, never `fetch`/`pull`/`rebase`/`merge`/`cherry-pick` to fix — that make
+your diff fat and smash final merge. Use what in worktree; if no can, hand off
+blocked and say which ref you expect.
 
 # Main Workflow
 
 ## Step 1: Implement
 
-Ensure ALL changes are made on `<worktree-branch>`, in `<worktree-path>`.
-Implement the smallest change that satisfies the task, depending on the task
-type:
+Make ALL change on `<worktree-branch>`, in `<worktree-path>`. Make smallest
+change that do task, by task type:
 
-- development task: use the /implement skill
-- prototype task: use the /prototype skill
-- research task: use the /research skill
+- development task: use /implement skill
+- prototype task: use /prototype skill
+- research task: use /research skill
 
-Append progress notes to the task body using the "Progress notes" section in
-References.
+Add progress note to task body using "Progress notes" section in References.
 
 End every commit subject with `(task <task-id>)`, never `#<task-id>` — GitHub
-reads `#N` as a PR/issue link and squash-merge appends `(#PR)` in the same form.
+read `#N` as PR/issue link and squash-merge add `(#PR)` same way.
 
-Your fixed point for code review is `git merge-base HEAD <parent-branch>` —
-not `<parent-branch>` HEAD itself, which moves as siblings merge and would
-show this task's diff *minus* a sibling's already-landed work.
+Your fix point for code review is `git merge-base HEAD <parent-branch>` — not
+`<parent-branch>` HEAD, which move as sibling merge and show this task diff
+*minus* sibling work already land.
 
-Run the self-review per "Self-review" in References. When it returns, append
-the entire verdict block to the task body:
+Run self-review per "Self-review" in References. When come back, add whole
+verdict block to task body:
 
 ```bash
 kanban-md edit <task-id> --append-body "<review block>" --timestamp --claim <agent>
 ```
 
-Bounded fix loop: on `CHANGES_REQUESTED`, fix the findings and re-review, up
-to 3 cycles total. If cycle 3 still returns `CHANGES_REQUESTED`, hand off
-blocked with the last verdict block (see "Blocked / Needs User Input") instead
-of proceeding to Step 2.
+Fix loop have limit: on `CHANGES_REQUESTED`, fix finding and re-review, up to
+3 cycle total. If cycle 3 still give `CHANGES_REQUESTED`, hand off blocked
+with last verdict block (see "Blocked / Needs User Input") instead of go
+Step 2.
 
 ## Step 2: Hand off for merge
 
-Use the project's "Definition of Done" to confirm the task is ready. Hand off
-for the coordinator to merge — merging is never yours to do:
+Use project "Definition of Done" to check task ready. Hand off for coordinator
+to merge — merge never yours to do:
 
 ```bash
 kanban-md handoff <task-id> --claim <agent> --release \
@@ -85,64 +80,59 @@ kanban-md handoff <task-id> --claim <agent> --release \
   --timestamp
 ```
 
-This moves the task to `review` and releases your claim — that release is
-what tells the coordinator's `pick --status todo` this task is no longer
-in flight. Stop here. The coordinator picks up the merge decision with the
-user and either merges (task ends `done`) or sends you feedback by
-re-prompting you, or moves the task back to `todo` for a fresh pick if you
-already exited.
+This move task to `review` and drop your claim — that drop tell coordinator
+`pick --status todo` this task no longer in flight. Stop here. Coordinator
+take merge decision to user and either merge (task end `done`) or send you
+feedback by re-prompt you, or move task back to `todo` for fresh pick if you
+already gone.
 
 ### Judgment calls
 
-End every handoff note with the edits a reviewer would most likely reverse,
-hardest to defend first. A judgment call is anything you chose rather than
-derived: scope you widened, a claim you took from the plan without checking it
-against the code, a test you altered instead of added, a file you touched that
-the task did not name. Give each one its location and the cheapest way to undo
-it.
+End every handoff note with edit reviewer most likely undo, hardest to defend
+first. Judgment call is anything you pick, not derive: scope you widen, claim
+you take from plan without check against code, test you change instead of add,
+file you touch that task no name. Give each one location and cheapest way to
+undo.
 
-List them even when the review returned `APPROVE`. A reviewer shares your
-reasoning and blesses calls the user never made, so those are the ones worth
-surfacing. Name at least the single call you would defend least.
+List them even when review give `APPROVE`. Reviewer share your thinking and
+bless call user never make, so those worth show. Name at least one call you
+defend least.
 
 # References
 
 ## Self-review
 
-Before handing off, run an independent self-review. Spawn the
-`kanban-reviewer` agent (defined in `~/.claude/agents/`; it pins a strong
-model so review quality doesn't inherit a cheaper implementing model) with
-cwd set to `<worktree-path>`. If that agent type is unavailable, fall back to
-a fresh-context general-purpose sub-agent on the strongest available model.
-Either way, have it read `reviewing-changes.md` (bundled beside this file, in
-the same skill directory) for the full checklist and output contract. Inputs
-to give it:
+Before hand off, run own self-review. Spawn `kanban-reviewer` agent (live in
+`~/.claude/agents/`; it pin strong model so review quality no inherit cheaper
+implementing model) with cwd set to `<worktree-path>`. If that agent type no
+there, fall back to fresh-context general-purpose sub-agent on strongest model
+you have. Either way, make it read `reviewing-changes.md` (bundle beside this
+file, same skill directory) for full checklist and output contract. Input to
+give it:
 
 - Task ID: `<task-id>`
-- Plan: whatever is linked from the task body, or "trivial — no plan"
-- Base ref: `git merge-base HEAD <parent-branch>` (compute this first, pass
-  the resolved SHA)
+- Plan: whatever link from task body, or "trivial — no plan"
+- Base ref: `git merge-base HEAD <parent-branch>` (compute first, pass
+  resolved SHA)
 - Head ref / branch: `<worktree-branch>`
 - Worktree path: `<worktree-path>`
 
 ## Progress notes
 
-While a task is `in-progress`, leave short timestamped notes in the task body
-(especially after major steps or before/after running tests). This makes
-handoffs and reviews much faster.
+While task `in-progress`, leave short timestamp note in task body (most after
+big step or before/after run test). This make handoff and review much fast.
 
 ```bash
 kanban-md edit <task-id> --append-body "Implemented X/Y/Z, now running tests." --timestamp --claim <agent>
 ```
 
-The `--append-body` (`-a`) flag appends text to the existing body without
-replacing it. The `--timestamp` (`-t`) flag prefixes a timestamp line like
-`[[2026-02-10]] Mon 15:04`.
+`--append-body` (`-a`) flag add text to body, no replace. `--timestamp` (`-t`)
+flag put timestamp line in front like `[[2026-02-10]] Mon 15:04`.
 
 ## Blocked / Needs User Input
 
-If you cannot continue without the user (decision, access, environment, or
-anything outside your control):
+If you no can go on without user (decision, access, environment, or anything
+outside your control):
 
 ```bash
 kanban-md handoff <task-id> --claim <agent> \
@@ -155,8 +145,8 @@ kanban-md handoff <task-id> --claim <agent> \
   --timestamp --release
 ```
 
-In your handoff note, include:
+In handoff note, put:
 
-- The exact question(s) for the user (prefer A/B options)
-- What you already tried and what happened
-- The minimal next step after the user responds
+- Exact question for user (prefer A/B option)
+- What you try already and what happen
+- Smallest next step after user answer
