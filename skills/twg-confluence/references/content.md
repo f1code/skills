@@ -103,6 +103,73 @@ file, and inspect the rendered layout before claiming visual verification.
 `--output-file` writes the full command payload, including the returned PNG URL.
 A URL alone is not visual proof.
 
+## Embed And Smart Link Reads
+
+An `embed` or `smart_link` stores a destination URL rather than the destination's
+content. Resolve the destination, route it by product or provider, and verify any
+connector result by provider identity.
+
+1. Read the Confluence item with `--format url`. Keep its title and destination
+   from `data.body.value`.
+
+   ```bash
+   twg confluence content get <content-ID> --format url --site <site> \
+     -o json --agent-fields data.title,data.body
+   ```
+
+   Omit `--detail`; embed and smart-link reads reject it. If a browser URL form
+   fails validation, pass the numeric content ID from it.
+
+2. Route the destination by product or provider before searching. Embeds commonly
+   point at Atlassian content or ordinary web pages, and neither is a connector
+   lookup.
+
+   | Destination                                                                                     | Action                                                                                          |
+   | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+   | A Confluence path such as `<site>.atlassian.net/wiki/...`                                       | Read it with `twg confluence content get "<url>"`. Do not search Rovo.                           |
+   | A Jira issue path such as `<site>.atlassian.net/browse/<KEY>`                                   | Read it with `twg jira workitem get <KEY> --site <site>`. Do not search Rovo.                    |
+   | Another Atlassian product                                                                       | Hand off to that product's native skill and command when available; otherwise report and stop.  |
+   | A connector-backed provider such as `docs.google.com` or `drive.google.com` for `google-drive` | Continue to step 3.                                                                             |
+   | Anything else, including public sites                                                           | Report the destination as an external link and stop. Do not search Rovo.                         |
+
+3. Search that connector by the exact title as stored in Confluence. Preserve
+   the whole title, including prefixes such as `Copy of `. If the quoted search
+   returns no canonical match, retry once unquoted with the same complete title.
+   Do not broaden further. Raw provider URLs and document IDs have poor search
+   recall.
+
+   ```bash
+   twg rovo search '"<title>"' --app <connector> --limit 20 \
+     -o json --agent-fields @evidence
+   ```
+
+4. Compare each candidate's stable provider resource ID with the destination.
+   Ignore query parameters and fragments. Compare recognizable path IDs
+   directly; use `twg resolve "<url>"` only when the URL forms do not expose a
+   clear identifier. A matching title alone is insufficient.
+
+For a read-only summary request, an exact provider resource ID match is
+sufficient to summarize that result's indexed text or snippets. Explicitly say
+that the summary may be partial or stale; do not present it as a full live read
+of the provider document.
+
+Keep the Confluence title and provider title as separate evidence. If they
+differ, report both and do not rewrite either title.
+
+Treat returned Rovo text or snippets as indexed, potentially partial or stale
+content. `twg docs get` is not a direct provider lookup: it scans the caller's
+recent-activity projection and may return metadata instead of the body.
+
+For a connector destination with no canonical match after the bounded title
+retry, report that connector availability, indexing, permissions, or search
+recall may be incomplete; indexing also lags document creation, so a recently
+added document may resolve on a later attempt. Do not substitute a similar
+result.
+
+Smart Folder children each carry their own destination and route independently.
+Children of one folder routinely land in different branches of step 2, so
+classify every child on its own rather than inferring its kind from a sibling.
+
 ## Writes
 
 - Supply the title through the title option, not as the first body heading.
@@ -154,3 +221,11 @@ Export behavior depends on the requested format:
 
 Do not poll Word exports, and do not treat the initial PDF task response as a
 completed export.
+
+## Downloading A Persisted Remix Infographic
+
+Use the existing attachment commands. List the owning page's attachments with
+`confluence content attachments list --id <content-id> --filename <media-file-id>`,
+then pass the matching result's attachment `id` to
+`confluence content attachments download --attachment-id <attachment-id> --out <path>`.
+Do not pass `mediaFileId` directly as `--attachment-id`; the two IDs are different.

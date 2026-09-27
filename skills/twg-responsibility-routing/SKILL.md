@@ -4,7 +4,6 @@ description: >
   Use with root `twg` to route owners, subject-matter experts, maintainers,
   reviewers, approvers, decision authorities, Heads of Engineering, or
   escalation paths for a topic, area, ask, project, service, or component.
-disable-model-invocation: true
 ---
 
 # twg-responsibility-routing
