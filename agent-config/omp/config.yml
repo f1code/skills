@@ -1,14 +1,12 @@
 setupVersion: 2
 modelRoles:
-  default: anthropic/claude-sonnet-5:medium
-  vision: anthropic/claude-opus-5:high
+  default: anthropic/claude-opus-5-5:medium
+  vision: anthropic/claude-fable-5-1:high
   designer: claude/claude-opus-5:high
   plan: claude/claude-opus-5:high
-  task: anthropic/claude-sonnet-5:low
   tiny: anthropic/claude-haiku-4-5
   commit: anthropic/claude-haiku-4-5:off
   advisor: anthropic/claude-opus-5:medium
-  smol: anthropic/claude-haiku-4-5:off
   slow: anthropic/claude-opus-5:high
 defaultThinkingLevel: auto
 disabledProviders:
