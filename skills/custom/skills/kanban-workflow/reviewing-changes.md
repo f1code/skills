@@ -1,160 +1,115 @@
 # Reviewing Changes
 
-Instructions for a fresh-context review sub-agent. You were given this file's
-path by an orchestrating agent (e.g. an autonomous kanban loop) that will parse
-your output. **Your output contract is strict** — see
-[Output Contract](#output-contract). Return *only* the review block, no
-commentary before or after.
+Brief for one fresh-context reviewer per axis. Read `## Shared`, then only
+your `## Axis: <axis>` section.
 
-You are a Senior Code Reviewer with expertise in software architecture, design
-patterns, and best practices. Review a completed change set against its plan or
-requirements and identify issues **before they cascade**. Your job is not to
-rubber-stamp: a clean change set with no findings on a non-trivial diff should
-be rare. If you genuinely find nothing, say what you verified.
+## Shared
 
-## Inputs you should have been given
+You review one axis of a change set before it reaches the user. Not a rubber
+stamp: a clean non-trivial diff should be rare. If you find nothing, say what
+you verified in `strengths`.
 
-- **Task ID / description** — what was built
-- **Plan / requirements** — what it should do (a plan file path, task text, or
-  "trivial — no plan")
-- **Base ref** — the starting point (e.g. the integration branch or `main`)
-- **Head ref / branch** — the change set under review
-- **Worktree path** — where to run commands (usually your cwd)
+**Inputs.** Your prompt file holds task, body, worktree path, diff command
+with scope, standards files, user feedback, judgment calls, checks and tests
+run, and previous findings with dispositions. Read all of it, then run the
+diff command. Read surrounding code where the diff alone can't settle a
+finding.
 
-If any are missing, infer what you can from git history; never block on missing
-inputs — review what is in front of you.
+**Read-only.** Read/Grep/Glob, `git -C <worktree> diff`/`log`/`show`. Your
+only write is the `submit` command in the prompt file. Never
+`fetch`/`pull`/`rebase`/`merge`/`cherry-pick` or edit files; a wrong-looking
+base is a finding. The script already ran checks and tests; don't rerun them.
 
-Never `fetch`/`pull`/`rebase`/`merge`/`cherry-pick`. A wrong-looking base ref
-is a finding, not something to repair.
+**Previous findings.** Match `<axis>#<k>` against the disposition sections:
 
-## Procedure
+- `fixed <sha>`: verify in the diff; re-raise if not fixed.
+- `declined: <reason>`: omit, or re-raise rebutting the reason.
 
-1. **Read the plan** (if a path was given) so you know the intended scope.
-2. **Inspect the diff** from the worktree:
-   ```bash
-   git diff --stat <base-ref>..<head-ref>
-   git diff <base-ref>..<head-ref>
-   ```
-3. **Run the checks** the project uses, if applicable:
-   ```bash
-   go test ./...
-   golangci-lint run ./...
-   ```
-   Failing tests or lint are **Critical**.
-4. **Investigate — don't just skim.** For each checklist area below, actively
-   probe rather than pattern-match. Concretely:
-   - Trace any lock/mutex held across I/O or network calls.
-   - Compare every new test's *name and assertion* to what it actually
-     verifies (a test named "…Coalesces" that only asserts "> 0" is mislabeled).
-   - Confirm every new public symbol / handler name / config key is covered by
-     a test.
-   - Scan for redundant allocations/conversions, swallowed errors, and
-     typed-nil-in-interface traps.
-   - Check error classification (transient vs permanent/poison) is correct.
-5. **Evaluate against the checklist**, then emit the review block.
+**User feedback** outranks task body and plan. Feedback the diff ignores is a
+finding on whichever axis it touches.
 
-## What to Check
+**Severity.** One tier per finding:
 
-**Plan alignment**
-- Does the implementation match the plan / requirements?
-- Are deviations justified improvements, or problematic departures?
-- Is all planned functionality present?
+- **Critical**: bugs, security issues, data loss, broken functionality,
+  missing planned functionality, problematic plan deviations. Must fix.
+- **Important**: architecture problems, missing error handling, test gaps,
+  correctness-adjacent issues, notable performance problems. Should fix.
+- **Suggestion**: style, micro-optimizations, doc polish, non-essential
+  refactors.
 
-**Code quality**
-- Clean separation of concerns?
-- Proper error handling and classification?
-- Type safety where applicable?
-- DRY without premature abstraction?
-- Edge cases handled?
+Calibrate honestly: no nitpick inflated to Important, no real risk downgraded
+to Suggestion. Script blocks the axis on ≥1 Critical, ≥1 Important or ≥3
+Suggestions, so don't pad.
 
-**Architecture**
-- Sound design decisions?
-- Reasonable scalability and performance (locks, allocations, hot paths)?
-- Security concerns?
-- Integrates cleanly with surrounding code?
+**Each finding:** `file`, `line` (or `null`), `what` is wrong, `why` it
+matters; `fix` on Critical/Important. Cite only code you read; don't invent
+issues to look thorough. `strengths`: specific, with `file:line`; never
+"looks good" unread.
 
-**Testing**
-- Tests verify real behavior, not mocks?
-- Test names match their assertions?
-- New public surface covered?
-- Edge cases covered? All tests passing?
+## Axis: spec
 
-**Production readiness**
-- Migration strategy if schema changed?
-- Backward compatibility considered?
-- Documentation complete? No obvious bugs?
+Does the diff do what was asked? Plan = plan linked from task body, else the
+body itself. Report:
 
-## Severity model
+- requirements missing or partial;
+- behaviour nobody asked for (scope creep);
+- requirements that look implemented but wrongly.
 
-Categorize every finding into exactly one tier:
+Quote the task, plan or feedback line each finding rests on. Challenge every
+judgment call: plan said X, leaf did Y; is Y defensible, and did the user get
+a say?
 
-- **Critical** — bugs, security issues, data-loss risks, broken functionality,
-  failing tests/lint, missing planned functionality, problematic plan
-  deviations. Must fix before merge.
-- **Important** — architecture problems, missing error handling, test gaps
-  (uncovered new surface, mislabeled tests), correctness-adjacent issues,
-  notable performance problems. Should fix before merge.
-- **Suggestion** — style, micro-optimizations, documentation polish,
-  non-essential refactors.
+## Axis: standards
 
-Calibrate honestly. Do not inflate a nitpick to Important, and do not downgrade
-a real correctness risk to Suggestion to make the change pass.
+Does the diff follow the repo's documented standards? Read every standards
+file in the prompt. Cite file and rule for each violation; a documented-rule
+breach can be Critical or Important.
 
-## Verdict rule (deterministic)
+Smell baseline: read step 3 of `~/.agents/skills/code-review/SKILL.md` (Fowler
+smells); don't copy it here. Repo standards override it; smells stay judgment
+calls, Suggestion unless they cause a real defect. Skip what tooling enforces.
 
-Compute the verdict mechanically from the finding counts:
+Probe, don't skim:
 
-- **≥1 Critical → `CHANGES_REQUESTED`**
-- **≥1 Important → `CHANGES_REQUESTED`**
-- **≥3 Suggestion → `CHANGES_REQUESTED`**
-- otherwise → `APPROVE`
+- error handling and classification (transient vs permanent), swallowed
+  errors, typed-nil-in-interface traps;
+- locks held across I/O or network calls;
+- each new test's name vs its assertion (a test named "…Coalesces" asserting
+  only `> 0` is mislabeled);
+- every new public symbol, handler, config key covered by a test;
+- type safety, edge cases, security, migrations, backward compatibility.
 
-Always list **all** findings regardless of verdict — an `APPROVE` may still
-carry one or two Suggestions, and they form the improvement backlog the
-orchestrator records on the task.
+Changed behaviour no test exercises → Important. `## Tests run` with
+`none: <reason>` → Important only when the reason doesn't hold (e.g.
+production code labelled prototype).
 
-## Output Contract
+## Axis: complexity
 
-Return **only** this block. The orchestrator parses the `verdict:` line and the
-`counts:` line, and acts on the verdict.
+Hunt over-engineering only; the diff's best outcome is getting shorter.
+Correctness, security, performance belong to other axes. Kinds:
 
-```
-verdict: APPROVE
-counts: critical=0 important=0 suggestion=2
+- **delete**: dead code, unused flexibility, speculative feature.
+- **stdlib**: hand-rolled thing the standard library ships; name it.
+- **native**: dependency or code doing what the platform does; name it.
+- **yagni**: abstraction with one implementation, config nobody sets, layer
+  with one caller.
+- **shrink**: same logic, fewer lines; show the shorter form in `fix`.
 
-## Strengths
-- <specific, file:line where possible>
+Start `what` with the kind (`yagni: …`). Important only for: new dependency,
+unused abstraction or parameter, reimplemented stdlib or existing repo helper.
+Everything else is Suggestion. One smoke test or `assert` self-check is the
+minimum, never bloat.
 
-## Findings
-1. [SUGGESTION] <file:line — what's wrong, why it matters>
-2. [SUGGESTION] <file:line — what's wrong, why it matters>
-```
+## Axis: ui
 
-or
+Static review of changed UI files; no browser. Check:
 
-```
-verdict: CHANGES_REQUESTED
-counts: critical=1 important=2 suggestion=1
-
-## Strengths
-- <specific>
-
-## Findings
-1. [CRITICAL]   <file:line — what's wrong, why it matters, how to fix>
-2. [IMPORTANT]  <file:line — what's wrong, why it matters, how to fix>
-3. [IMPORTANT]  <file:line — ...>
-4. [SUGGESTION] <file:line — ...>
-```
-
-Rules:
-- First line MUST be exactly `verdict: APPROVE` or `verdict: CHANGES_REQUESTED`,
-  consistent with the verdict rule applied to `counts:`.
-- Second line MUST be `counts: critical=<n> important=<n> suggestion=<n>`.
-- Every finding MUST be tagged `[CRITICAL]`, `[IMPORTANT]`, or `[SUGGESTION]`.
-- Every finding MUST cite `file:line`, state what's wrong, and why it matters;
-  Critical/Important must also say how to fix.
-- Acknowledge real strengths (accurate praise builds trust) — but never
-  "looks good" without having read the code.
-- No prose before `verdict:` or after the findings list.
-- Do not give feedback on code you did not actually read. Do not invent issues
-  to look thorough.
+- hardcoded colors, sizes, spacing where the repo has tokens or theme vars;
+- dark mode: new colors defined for both themes;
+- contrast of text and controls;
+- focus visible, keyboard reachable, no click-only handlers on non-buttons;
+- semantic HTML (`button`, `label`, headings, lists) over styled `div`s;
+- form labels, `alt` text, accessible names on icon buttons;
+- phone width: no fixed widths forcing horizontal scroll;
+- layout shift: images and async content reserve space;
+- consistency with neighbouring components (spacing, patterns, wording).

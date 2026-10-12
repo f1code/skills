@@ -57,8 +57,8 @@ successive polls, all three hold:
 - its last progress note is older than 10 minutes, and
 - `read-output` is byte-identical to the previous poll.
 
-The progress-note clause keeps a long `go test` from tripping this: the leaf
-already writes timestamped notes around major steps and test runs
+The progress-note clause keeps a long test run or review round from tripping
+this: the leaf already writes timestamped notes around major steps and test runs
 (`kanban-leaf-task.md`, "Progress notes"), so recent activity exempts a child
 that is simply busy.
 
@@ -71,5 +71,4 @@ Notify once per suspect child, not once per poll — `notify`'s `--identifier`
 replaces rather than stacks, but re-focusing every 30s would fight the user's
 cursor, so latch it (skip `focus` on repeat suspect polls for the same child).
 
-The leaf's `allowed-tools` allowlist makes permission stalls uncommon; this is
-a backstop, not the main path.
+Panes run in auto mode, so permission stalls are rare; this is a backstop.

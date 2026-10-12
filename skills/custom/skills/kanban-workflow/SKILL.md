@@ -10,8 +10,6 @@ allowed-tools:
   - Bash(wt *)
   - Bash(herdr *)
   - Bash(kitten *)
-  - Bash(go *)
-  - Bash(golangci-lint *)
   - Bash(awk *)
   - Bash(date *)
 disable-model-invocation: true
@@ -134,13 +132,14 @@ recursion never do; this is the one exception, since here the coordinator
    unmodified — including its Step 2 handoff to `review`. Its precondition
    ("the coordinator already created `<worktree-path>`… you only write code
    and hand off") is satisfied by step 2 above.
-4. Follow **`merge-gate.md`** with `<target-branch>` = `<parent-branch>`,
-   which also marks the task `done` on approval.
+4. Follow **`merge-gate.md`** with `<target-branch>` = `<parent-branch>` and
+   `<claimant>` = `<agent>`; it marks the task `done` on approval. Not
+   approved → follow `kanban-leaf-task.md` Entry.
 
 Handing off to yourself is not ceremony: it creates the same resumability
 waypoint the fan-out path has. A crash mid-run leaves the task in `review`
-with its verdict block in the body — exactly the state Step 4 below reports,
-and a re-invocation can resume from it.
+with its `## Review round` block in the body — exactly the state Step 4 below
+reports, and a re-invocation can resume from it.
 
 ## Step 4: Report and exit
 

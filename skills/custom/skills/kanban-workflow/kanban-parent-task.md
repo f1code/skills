@@ -11,8 +11,6 @@ allowed-tools:
   - Bash(wt *)
   - Bash(herdr *)
   - Bash(kitten *)
-  - Bash(go *)
-  - Bash(golangci-lint *)
   - Bash(awk *)
   - Bash(date *)
 disable-model-invocation: true
@@ -208,15 +206,19 @@ On each settle (from the board, on either driver):
 ### Step 5: Merge gate (per handed-off child)
 
 Follow **`merge-gate.md`** (in this skill's directory) with `<target-branch>`
-= `<integration-branch>`. Other live children keep working while the user
+= `<integration-branch>` and `<claimant>` = `kb-<child-id>`. Other live children keep working while the user
 decides — this is not a blocking gate on the whole coordinator, only on this
 child's merge.
 
 - **Approved** — merge-gate's merge and `--status done` free the fan-out
   slot; go back to Step 3.
-- **Not approved** — the feedback comes back to you: relay it to the child by
-  re-prompting the pane. If the pane already exited, move the child back to
-  `todo` (`kanban-md move <child-id> todo`) so the next pass's `pick` sees it.
+- **Not approved** — merge-gate already recorded the feedback in the child's
+  body; re-prompt the pane so the child resumes per its Entry. If the pane
+  already exited, release it back to `todo` so the next pass's `pick` sees it
+  (`move` fails on a claimed task):
+  ```bash
+  kanban-md edit <child-id> --release --status todo
+  ```
 - **`wt merge` fails** — per `merge-gate.md`, additionally keep the parent
   claim. Do not touch other children's merges while this is open.
 
@@ -256,6 +258,6 @@ none merges itself.
 |---|---|
 | All children merged | Test the integration branch, `kanban-md handoff <parent-id> --claim <agent> --release --note "<summary of merged children>"` to move it to `review`, report the branch, exit |
 | A child is `blocked` | Already notified + focused; report it as outstanding, do not treat the parent as done |
-| A child's review loop exhausts 3 cycles | Child hands off blocked with its last verdict block; handled identically to a `blocked` child |
+| A child's review loop exhausts 3 rounds | Child hands off blocked; verdict in body; handle as any `blocked` child; re-prompt follows leaf Entry |
 | `wt merge` fails | Left open per `merge-gate.md`; report the path, keep the parent claim, ask the user |
 | Coordinator dies | Parent claim expires in 1h and is reclaimable; `Integration branch:` and each child's `Branch:` line make the run resumable — re-invoke this file with the same `<parent-id>` |

@@ -1,2 +1,4 @@
 skills/.trash/
 skills/synced/
+__pycache__/
+.pytest_cache/
