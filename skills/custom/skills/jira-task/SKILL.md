@@ -18,8 +18,10 @@ disable-model-invocation: true
 
 # Jira Task
 
-`<kw>` = `../kanban-workflow` relative to this file. Jira read-only: never
-transition, comment or edit. User owns Jira status and PR comment replies.
+`<kw>` = `../kanban-workflow` relative to this file. Jira writes: "Jira
+start" only (assign to me, To Do → In Progress). Never comment, change other
+fields or move past In Progress. User owns later Jira status and PR comment
+replies.
 
 Board at project root always exists; kanban-workflow `SKILL.md` "Multi-Agent
 Environment" rules apply. Local task = state store; body append-only
@@ -42,12 +44,12 @@ Environment" rules apply. Local task = state store; body append-only
    - Body has `PR:` line → "PR feedback".
    - Status `review`, blocked (leaf handed off "Waiting on user" or round-3
      CHANGES_REQUESTED): no notes → STOP, print its `## Handoff` note. Notes
-     = user's answer → resume below, step 7 (leaf Entry records them,
-     `--unblock`).
+     = user's answer → resume below; it goes to step 7 (leaf Entry records
+     them, `--unblock`).
    - Else resume: `kanban-md edit <task-id> --claim <agent>` (nonzero → STOP,
      quote stderr). No `Branch:` line → step 5. Else
-     `wt switch <worktree-branch> --no-cd --format json` → `<worktree-path>`;
-     status `review` → step 8, else step 7.
+     `wt switch <worktree-branch> --no-cd --format json` → `<worktree-path>`.
+     "Jira start". Status `review` → step 8, else step 7.
 4. New task:
    - Fetch
      `twg jira workitem get KEY --fields summary,description,issuetype,subtasks -o json`
@@ -63,7 +65,7 @@ Environment" rules apply. Local task = state store; body append-only
      Jira.
 5. Plan gate: `<kw>/SKILL.md` Step 2. Grilling wants a split → never create
    children; `kanban-md edit <task-id> --release --status todo`, STOP.
-6. Worktree: branch per `<kw>/branch-naming.md` → `<worktree-branch>`. Then
+6. "Jira start". Worktree: branch per `<kw>/branch-naming.md` → `<worktree-branch>`. Then
    `<kw>/SKILL.md` leaf step 2 (`wt switch --create <worktree-branch> --base
    <parent-branch>`, record `Branch:`, `EnterWorktree`).
 7. Follow `<kw>/kanban-leaf-task.md`. Extra args (`notes`) → `## User
@@ -71,6 +73,18 @@ Environment" rules apply. Local task = state store; body append-only
 8. Claude Code: `ExitWorktree action: keep`. Follow `<kw>/merge-gate.md`
    with `<target-branch>` = `<parent-branch>`, `<claimant>` = `<agent>`,
    `<finish>` = `pr`. Not approved → re-enter worktree, step 7.
+
+## Jira start
+
+Run before step 7 or 8 on every path; idempotent.
+`twg jira workitem get KEY --fields status -o json` → `status.statusCategory.key`:
+
+- `done` → STOP, tell user.
+- `new` → `twg jira workitem update --id KEY --assignee me --status "In Progress"`.
+  Status rejected → `twg jira workitem transition --id KEY` lists
+  transitions; take the one whose target category is `indeterminate`; none
+  clear → ask user.
+- else → `twg jira workitem update --id KEY --assignee me`.
 
 ## PR feedback
 
@@ -80,7 +94,7 @@ Environment" rules apply. Local task = state store; body append-only
    and no extra args → STOP.
 3. `kanban-md edit <task-id> --claim <agent> --status in-progress` (nonzero →
    STOP). `wt switch <worktree-branch> --no-cd --format json` →
-   `<worktree-path>`. Sync with remote (user may have pushed):
+   `<worktree-path>`. "Jira start". Sync with remote (user may have pushed):
    `git -C <worktree-path> fetch origin <worktree-branch> && git -C <worktree-path> merge --ff-only origin/<worktree-branch>`;
    not fast-forward → STOP, ask user.
 4. Record picked comments plus extra args as one `## User feedback` section
