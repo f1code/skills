@@ -5,15 +5,15 @@ Implements the five pane-driver operations in `kanban-parent-task.md`.
 | Op | Call |
 |---|---|
 | `resolve-kind` | `herdr agent get "$HERDR_PANE_ID"` |
-| `spawn` | `new_pane_id=$(herdr pane split --pane "$HERDR_PANE_ID" --no-focus --direction down --cwd <worktree-path> \| jq -r '.result.pane.pane_id')`, then `herdr agent start kb-<child-id> --kind <kind> --pane "$new_pane_id"`, then `herdr agent prompt kb-<child-id> "<filled prompt>"` |
+| `spawn` | `new_pane_id=$(herdr tab create --workspace "$HERDR_WORKSPACE_ID" --no-focus --label kb-<child-id> --cwd <worktree-path> \| jq -r '.result.root_pane.pane_id')`, then `herdr agent start kb-<child-id> --kind <kind> --pane "$new_pane_id"`, then `herdr agent prompt kb-<child-id> "<filled prompt>"` |
 | `focus` | `herdr agent focus kb-<child-id>` |
 | `notify` | `herdr notification show "<title>" --sound request` |
 | `read-output` | not used by this driver — herdr reports real lifecycle state instead |
 
-Both `spawn` flags are load-bearing: without `--pane`, herdr splits whatever
-pane is focused, landing children in whatever tab the user is looking at;
-`--no-focus` keeps spawning from stealing focus, since `focus` is the only op
-that should move it.
+One tab per child: splits shrink too fast with several children.
+Both `spawn` flags are load-bearing: without `--workspace`, herdr may target
+the workspace the user is looking at; `--no-focus` keeps spawning from
+stealing focus, since `focus` is the only op that should move it.
 
 ## Settle detection: bounded fast path
 
