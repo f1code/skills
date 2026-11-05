@@ -37,20 +37,6 @@ directory, so every worktree shares the one board and no `--dir` flag is ever
 needed. A board tracked inside the repo would give each worktree its own
 diverging copy — move it to the project root before running this skill.
 
-**Driver guard, once at setup:**
-
-```bash
-if [ -n "$HERDR_PANE_ID" ]; then driver=herdr
-elif [ -n "$KITTY_LISTEN_ON" ]; then
-  kitten @ ls --self >/dev/null 2>&1 || { echo "STOP: KITTY_LISTEN_ON is set but kitten @ ls --self failed — fix kitty remote control (see README.md) rather than falling through"; exit 1; }
-  driver=kitty
-else
-  echo "STOP: neither herdr (\$HERDR_PANE_ID) nor kitty remote control (\$KITTY_LISTEN_ON) is available"; exit 1
-fi
-```
-
-Pass `<driver>` to every recursive child, next to `<agent>`.
-
 ## Agent Identity
 
 ```bash
@@ -105,6 +91,20 @@ kanban-md list --parent <task-id> --json | jq 'length'
 
 ### Children exist → this task is a parent
 
+**Driver guard, once:**
+
+```bash
+if [ -n "$HERDR_PANE_ID" ]; then driver=herdr
+elif [ -n "$KITTY_LISTEN_ON" ]; then
+  kitten @ ls --self >/dev/null 2>&1 || { echo "STOP: KITTY_LISTEN_ON is set but kitten @ ls --self failed — fix kitty remote control (see README.md) rather than falling through"; exit 1; }
+  driver=kitty
+else
+  echo "STOP: neither herdr (\$HERDR_PANE_ID) nor kitty remote control (\$KITTY_LISTEN_ON) is available"; exit 1
+fi
+```
+
+Pass `<driver>` to every recursive child, next to `<agent>`.
+
 Follow **`kanban-parent-task.md`** (in this skill's directory) with
 `<task-id>` as the parent. It drives the whole subtree: branch creation,
 fan-out, review gating, and merges.
@@ -127,14 +127,17 @@ recursion never do; this is the one exception, since here the coordinator
    ```
    Record `Branch: task/<task-id>-<slug>` in the task body. This is
    `<worktree-branch>`; the created path is `<worktree-path>`.
+   Claude Code: `EnterWorktree path: <worktree-path>` (no tool → skip).
 3. Bind `<agent>`, `<parent-branch>`, `<worktree-branch>`, `<worktree-path>`
    and `<task-id>`, and follow **`kanban-leaf-task.md`**
    unmodified — including its Step 2 handoff to `review`. Its precondition
    ("the coordinator already created `<worktree-path>`… you only write code
    and hand off") is satisfied by step 2 above.
-4. Follow **`merge-gate.md`** with `<target-branch>` = `<parent-branch>` and
-   `<claimant>` = `<agent>`; it marks the task `done` on approval. Not
-   approved → follow `kanban-leaf-task.md` Entry.
+4. Claude Code: `ExitWorktree action: keep` first; gate merges from board
+   home. Follow **`merge-gate.md`** with `<target-branch>` = `<parent-branch>`
+   and `<claimant>` = `<agent>`; it marks the task `done` on approval. Not
+   approved → re-enter worktree as in step 2, follow `kanban-leaf-task.md`
+   Entry.
 
 Handing off to yourself is not ceremony: it creates the same resumability
 waypoint the fan-out path has. A crash mid-run leaves the task in `review`

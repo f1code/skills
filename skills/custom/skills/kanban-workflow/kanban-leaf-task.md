@@ -72,8 +72,10 @@ change that do task, by task type:
 
 Add progress note to task body using "Progress notes" section in References.
 
-End every commit subject with `(task <task-id>)`, never `#<task-id>` — GitHub
-read `#N` as PR/issue link and squash-merge add `(#PR)` same way.
+Commit subject: project convention (`AGENTS.md`/`CONTRIBUTING.md`) first;
+else body have `Ticket: KEY` → `KEY: <msg>`; else `<msg> (task <task-id>)`.
+Never `#<task-id>` — GitHub read `#N` as PR/issue link and squash-merge add
+`(#PR)` same way.
 
 Discovery that change approach = judgment call: record what plan say, what you
 find, what you do, cheapest undo. Spec wrong in way you no should decide →

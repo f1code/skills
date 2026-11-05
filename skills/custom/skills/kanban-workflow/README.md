@@ -13,3 +13,6 @@ branch/worktree naming rules), `merge-gate.md` (shared merge-decision flow),
 `docs/plans/implemented/2026-08-15-kanban-workflow-design.md` and
 `docs/plans/implemented/2026-08-16-pane-driver-abstraction.md` for the
 settled design decisions behind this shape.
+
+Sibling skill `../jira-task` runs one Jira ticket as a leaf of this workflow,
+ending in a Bitbucket PR.

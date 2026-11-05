@@ -5,7 +5,7 @@ Precedence, applied once per task:
 1. Project convention documented in `AGENTS.md` / `CONTRIBUTING.md`.
 2. External ticket id: a `Ticket: <id>` body line, else `[A-Z]{2,}-\d+`
    matched against the body — never sniffed from arbitrary text (`ADR-0002`,
-   `RFC-7231` would produce garbage).
+   `RFC-7231` would produce garbage). Leaf shape: `<id>-<slug>`.
 3. Default: `epic/<id>-<slug>` for a task with children, `task/<id>-<slug>`
    for a leaf.
 

@@ -1,7 +1,7 @@
 ## Merge gate
 
 Parameters: `<task-id>`, `<worktree-path>`, `<target-branch>`, `<claimant>`
-(identity that resumes the work).
+(identity that resumes the work), `<finish>`: `merge` (default) | `pr`.
 
 ```bash
 uv run <skill-dir>/kanban_review.py gate <task-id> <worktree-path> <target-branch>
@@ -21,7 +21,29 @@ git -C <worktree-path> diff $(git -C <worktree-path> merge-base HEAD <target-bra
 
 Wait for explicit go-ahead.
 
-- **Approved** — merge from board home, one at a time (single writer on
+- **Approved, `<finish>` = `pr`** — values: `KEY` from body `Ticket:`,
+  `<summary>` = task title, `<dest>` = `<target-branch>` minus `origin/`,
+  `<branch>` from body `Branch:`. PR title: project convention
+  (`AGENTS.md`/`CONTRIBUTING.md`) first, else `KEY: <summary>`. Approval
+  covers notifying PR reviewers.
+  - No `PR:` body line → write PR description to a scratchpad `<file>`
+    (ticket URL, judgment calls, tests run), then:
+    ```bash
+    git -C <worktree-path> push -u origin <branch>
+    twg bb prs create --source <branch> --dest <dest> \
+      --title "<title>" --description-file <file> -o json
+    kanban-md edit <task-id> --release --status done -a "PR: <id> <url>" -t
+    wt remove --foreground <branch>
+    ```
+    Check PR id/url field names in output. twg infers workspace/repo from
+    the Bitbucket `origin` remote.
+  - `PR:` line present:
+    ```bash
+    git -C <worktree-path> push
+    kanban-md edit <task-id> --release --status done -a "pushed <sha> to PR <id>" -t
+    wt remove --foreground <branch>
+    ```
+- **Approved** (`merge`) — merge from board home, one at a time (single writer on
   `<target-branch>`: every merge validates against the true tip, so no
   non-fast-forward refusals, pre-merge hook contention, or under-tested tips):
   ```bash
