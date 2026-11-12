@@ -6,8 +6,8 @@ modelRoles:
   plan: claude/claude-opus-5:high
   tiny: anthropic/claude-haiku-4-5
   commit: anthropic/claude-haiku-4-5:off
-  advisor: anthropic/claude-opus-5:medium
-  slow: anthropic/claude-opus-5:high
+  smol: anthropic/claude-haiku-4-5:low
+  task: anthropic/claude-sonnet-5-5:medium
 defaultThinkingLevel: auto
 disabledProviders:
   - cursor
@@ -26,3 +26,11 @@ retry:
   fallbackChains:
     default:
       - litellm/claude-opus-5
+hideThinkingBlock: true
+statusLine:
+  compactThinkingLevel: false
+  rightSegments:
+    - session_name
+    - token_total
+    - context_pct
+  preset: custom
