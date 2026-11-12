@@ -38,7 +38,7 @@ Apply those rules also to code comments and docstring.
 ## Standard Project Layout
 
 (project root)
-├── main                     (main development dir & git root)
+├── (project name)           (main development dir & git root)
 ├── worktrees/               (git worktrees container)
 │
 ├── plans/                   (project plans & docs - no git)
