@@ -127,14 +127,18 @@ recursion never do; this is the one exception, since here the coordinator
    ```
    Record `Branch: task/<task-id>-<slug>` in the task body. This is
    `<worktree-branch>`; the created path is `<worktree-path>`.
-   Claude Code: `EnterWorktree path: <worktree-path>` (no tool → skip).
+   Claude Code: `cd <worktree-path>`. Needs worktrees folder in
+   `permissions.additionalDirectories`; `Shell cwd was reset` → STOP, tell
+   user. Never `EnterWorktree`: its isolation check refuses reviewer `submit`.
+   Show task in terminal title: kitty
+   `kitten @ set-tab-title "<task-id> <worktree-branch>"`; herdr
+   `herdr pane rename "$HERDR_PANE_ID" "<task-id> <worktree-branch>"`.
 3. Bind `<agent>`, `<parent-branch>`, `<worktree-branch>`, `<worktree-path>`
    and `<task-id>`, and follow **`kanban-leaf-task.md`**
    unmodified — including its Step 2 handoff to `review`. Its precondition
    ("the coordinator already created `<worktree-path>`… you only write code
    and hand off") is satisfied by step 2 above.
-4. Claude Code: `ExitWorktree action: keep` first; gate merges from board
-   home. Follow **`merge-gate.md`** with `<target-branch>` = `<parent-branch>`
+4. Claude Code: `cd` to board home first; gate merges from there. Follow **`merge-gate.md`** with `<target-branch>` = `<parent-branch>`
    and `<claimant>` = `<agent>`; it marks the task `done` on approval. Not
    approved → re-enter worktree as in step 2, follow `kanban-leaf-task.md`
    Entry.

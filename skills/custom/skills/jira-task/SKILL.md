@@ -67,10 +67,10 @@ Environment" rules apply. Local task = state store; body append-only
    children; `kanban-md edit <task-id> --release --status todo`, STOP.
 6. "Jira start". Worktree: branch per `<kw>/branch-naming.md` → `<worktree-branch>`. Then
    `<kw>/SKILL.md` leaf step 2 (`wt switch --create <worktree-branch> --base
-   <parent-branch>`, record `Branch:`, `EnterWorktree`).
+   <parent-branch>`, record `Branch:`, `cd`, terminal title).
 7. Follow `<kw>/kanban-leaf-task.md`. Extra args (`notes`) → `## User
    feedback` at its Entry.
-8. Claude Code: `ExitWorktree action: keep`. Follow `<kw>/merge-gate.md`
+8. Claude Code: `cd` to board home. Follow `<kw>/merge-gate.md`
    with `<target-branch>` = `<parent-branch>`, `<claimant>` = `<agent>`,
    `<finish>` = `pr`. Not approved → re-enter worktree, step 7.
 
