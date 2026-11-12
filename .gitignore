@@ -3,3 +3,4 @@ skills/synced/
 kanban/
 __pycache__/
 .pytest_cache/
+.DS_Store
